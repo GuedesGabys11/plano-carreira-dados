@@ -320,9 +320,17 @@ code.code { background: var(--surf2); padding: 4px 8px; border-radius: 6px; font
 .tmBig { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* foco */
-.focus { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: none; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.focus { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: none; overflow-y: auto; align-items: center; justify-content: center; padding: 24px; text-align: center; }
 .focus.on { display: flex; }
-.fIn { max-width: 480px; }
+.fIn { max-width: 480px; width: 100%; }
+.fDesc { font-size: .95rem; }
+.fClock { position: relative; width: min(240px, 64vw); aspect-ratio: 1; margin: 20px auto; }
+.fClock svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.fClock svg circle { stroke-width: 8; }
+.fClock > div { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.fClock .fTm { margin: 0; }
+.fNext { margin-top: 18px; }
+.fBig { font-size: 3rem; color: var(--acc); margin: 0; }
 .fIn h2 { font-size: 1.6rem; margin: 6px 0 10px; }
 .fX { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; }
 
@@ -378,7 +386,8 @@ code.code { background: var(--surf2); padding: 4px 8px; border-radius: 6px; font
 
 const START = "2026-11-16", END = "2027-04-11", AFTER_END = "2027-06-30";
 const LIGHT = ["2026-12-20", "2027-01-05"];               /* fim de ano: ritmo leve */
-const PY_FROM = "2026-12-01";                              /* Python no Kaggle às ter/qui */
+const PY_FROM = "2027-04-12";                              /* Python só depois do plano */
+const SQL_BASIC = ["2026-11-16", "2026-11-29"];          /* SQL básico 20 min/dia no SQLBolt */
 const SQL_DAILY_FROM = "2027-01-11";                       /* SQL todo dia útil */
 const APPS_10_FROM = "2027-01-04";                         /* 10 candidaturas por semana */
 const OFF = { "2026-12-25": "Natal", "2027-01-01": "Ano Novo", "2027-02-08": "Carnaval", "2027-02-09": "Carnaval", "2027-03-26": "Sexta-feira Santa" };
@@ -412,9 +421,9 @@ const COURSES = [
   { id: "conc", n: "Conciliação Contábil Financeira com Excel (Lucas Dourado)", onde: "Udemy", st: "manter", link: LINKS.udemy("Conciliação Contábil Excel Lucas Dourado"), how: "Curto (1,5 h). Refaça a conciliação com dados próprios." },
   { id: "khan", n: "Estatística e Probabilidade", onde: "Khan Academy (grátis)", st: "gratis", link: LINKS.khan, how: "Só dados, medidas de centro e dispersão e distribuições. Não precisa de probabilidade agora." },
   { id: "story", n: "Storytelling com Dados (Cole Nussbaumer Knaflic)", onde: "Livro", st: "gratis", link: "", how: "Cerca de 1,5 capítulo por semana, aplicando no Projeto 2." },
-  { id: "sqlbolt", n: "SQLBolt", onde: "Site (grátis)", st: "gratis", link: LINKS.sqlbolt, how: "5 exercícios por dia nas semanas de SQL." },
+  { id: "sqlbolt", n: "SQLBolt", onde: "Site (grátis)", st: "gratis", link: LINKS.sqlbolt, how: "20 min por dia nas semanas 1 e 2 (SQL de teste) e nas semanas de SQL." },
   { id: "hr", n: "HackerRank – SQL", onde: "Site (grátis)", st: "gratis", link: LINKS.hackerrank, how: "1 exercício por dia útil a partir de 11/01." },
-  { id: "kpy", n: "Kaggle Learn – Python", onde: "Kaggle (grátis, em inglês)", st: "gratis", link: LINKS.kpy, how: "Ter e qui, 15 min, a partir de 01/12. Roda no navegador." },
+  { id: "kpy", n: "Kaggle Learn – Python", onde: "Kaggle (grátis, em inglês)", st: "gratis", link: LINKS.kpy, how: "Depois das 21 semanas, a partir de 12/04. Roda no navegador." },
   { id: "kpd", n: "Kaggle Learn – Pandas", onde: "Kaggle (grátis, em inglês)", st: "gratis", link: LINKS.kpd, how: "Depois do curso de Python, no mesmo horário." },
   { id: "en", n: "Inglês técnico", onde: "Documentação e vídeos em inglês", st: "gratis", link: LINKS.pbidocs, how: "15 min: leia uma página da documentação do Power BI em inglês ou veja um vídeo curto da área. O Inglês Rápido (Paulo Andrade) fica de reserva." },
   { id: "pl300", n: "PL-300 (Microsoft Learn)", onde: "Microsoft (trilha grátis, prova paga)", st: "depois", link: LINKS.pl300, how: "Abr a jun/2027: trilha completa e 2 simulados." },
@@ -437,22 +446,22 @@ const SKIP = [
 /* ---------- Fases (21 semanas + depois) ---------- */
 /* s = sessões dos dias úteis (45 min conteúdo + 45 min prática), sat = sábados (3 h) */
 const PHASES = [
-  { id: "f1", n: "Revisão para entrevista", w: "1–2", a: "2026-11-16", b: "2026-11-29", c: "pbi",
-    goal: "Explicar o Projeto 1 em voz alta e deixar currículo e LinkedIn prontos.",
-    deliver: "Roteiro de 3 minutos do Projeto 1.",
+  { id: "f1", n: "Pronta para entrevista e teste técnico", w: "1–2", a: "2026-11-16", b: "2026-11-29", c: "pbi",
+    goal: "Explicar o Projeto 1 sem travar e fazer SQL básico de teste. Currículo e LinkedIn prontos.",
+    deliver: "Roteiro de 3 minutos do Projeto 1, currículo nas 2 versões e LinkedIn revisado.",
     s: [
-      ["Modelo estrela do Projeto 1", "Explique em voz alta: fato, dimensões e por que estrela."],
-      ["Relacionamentos 1:N e direção do filtro", "Desenhe o modelo do Projeto 1 no papel e explique cada relação."],
-      ["Tabela calendário", "Por que ela existe e como foi criada no Projeto 1."],
-      ["DAX: SUM, COUNTROWS e DIVIDE", "Reescreva 3 medidas do Projeto 1 sem olhar."],
-      ["DAX: CALCULATE e FILTER", "Explique o que muda no contexto. Escreva 2 exemplos."],
-      ["Medida x coluna calculada", "Quando usar cada uma. Ache um exemplo no Projeto 1."],
-      ["Mês anterior e acumulado no ano", "DATEADD, TOTALYTD: escreva e teste."],
-      ["Power Query do Projeto 1", "Liste cada passo de limpeza e o motivo."],
-      ["SQL: SELECT, WHERE, GROUP BY e HAVING", "10 consultas curtas com a base do Projeto 1."],
-      ["SQL: INNER e LEFT JOIN", "Explique a diferença com duas listas do dia a dia."]
+      ["Fato x dimensão e modelo estrela", "Explique em voz alta com o modelo do Projeto 1: o que é fato, o que é dimensão e por que estrela."],
+      ["Relacionamento 1:N e direção do filtro", "Desenhe o modelo do Projeto 1 no papel e explique cada relação e para onde o filtro vai."],
+      ["Tabela calendário", "Por que ela existe, como foi criada no Projeto 1 e o que quebra sem ela."],
+      ["Medida x coluna e DIVIDE", "Quando usar cada uma. Reescreva 3 medidas do Projeto 1 sem olhar, usando DIVIDE."],
+      ["CALCULATE", "Explique o que muda no contexto de filtro. Escreva 2 exemplos com a base do Projeto 1."],
+      ["Mês anterior e acumulado no ano", "DATEADD e TOTALYTD: escreva, teste e explique em 1 frase cada."],
+      ["Ensaio: \"me explica como você fez esse projeto\"", "Responda em voz alta, grave e assista. Anote onde travou."],
+      ["Power Query do Projeto 1: tipos e duplicatas", "Conte cada etapa de limpeza: tipos de dados, duplicatas, e o motivo de cada uma."],
+      ["Power Query do Projeto 1: mesclar e acrescentar", "Explique a diferença com um exemplo do projeto. Relembre PROCX e SOMASES (10 min)."],
+      ["Ensaio final do Projeto 1", "Modelagem, DAX e Power Query em 3 minutos, gravado. Compare com o primeiro ensaio."]
     ],
-    sat: ["README do Projeto 1 + currículo (versão dados)", "Roteiro de 3 min gravado + currículo (versão contábil)"] },
+    sat: ["README do Projeto 1 + currículo (versão dados) + LinkedIn", "Roteiro de 3 min gravado + currículo (versão contábil)"] },
   { id: "f2", n: "Excel + Estatística", w: "3–4", a: "2026-11-30", b: "2026-12-13", c: "excel",
     goal: "Excel do dia a dia sem travar e estatística descritiva numa base real.",
     deliver: "Projeto 1 v2: estatística descritiva + página de resumo executivo. Começam as candidaturas.",
@@ -888,7 +897,7 @@ const MONL = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho
 const fmtD = s => { const d = pd(s); return pad(d.getDate()) + "/" + pad(d.getMonth() + 1); };
 const fmtLong = s => { const d = pd(s); return DOWL[d.getDay()] + ", " + d.getDate() + " de " + MONL[d.getMonth()]; };
 const hm = m => m >= 60 ? Math.floor(m / 60) + "h" + (m % 60 ? pad(m % 60) : "") : m + " min";
-const IN_CLAUDE = !!(window.claude && window.claude.use);
+const IN_CLAUDE = !!(window.claude && window.claude.use) || !/(github\.io|^localhost|^127\.0\.0\.1)$/.test(location.hostname) && location.protocol !== "file:";
 let toastT;
 function toast(m, act) {
   const t = $("#toast"); t.innerHTML = esc(m) + (act ? ' <button type="button" id="toastAct">' + esc(act[0]) + "</button>" : "");
@@ -967,8 +976,9 @@ function build() {
       const c = COURSES.find(x => x.id === ph.c);
       push(d, { id: "s:" + d, k: "estudo", t: s[0], m: 90, h: T.study, ph: ph.id, c: ph.c, link: c ? c.link : "", desc: "45 min de conteúdo + 45 min de prática. " + s[1] + " No fim, explique em voz alta por 2 min, como se fosse para um gestor." });
       const py = (w === 2 || w === 4) && d >= PY_FROM;
-      if (py) { const pdc = d < "2027-02-10" ? "kpy" : "kpd"; push(d, { id: "e:" + d, k: "py", t: pdc === "kpy" ? "Python no Kaggle" : "Pandas no Kaggle", m: 15, h: addT(T.study, 95), c: pdc, link: LINKS[pdc], desc: "Uma lição curta. Em inglês, então conta como inglês técnico também." }); }
-      else push(d, { id: "e:" + d, k: "en", t: "Inglês técnico", m: 15, h: addT(T.study, 95), c: "en", link: LINKS.pbidocs, desc: "Leia uma página da documentação do Power BI em inglês ou veja um vídeo curto da área." });
+      if (py) { const pdc = d < "2027-05-17" ? "kpy" : "kpd"; push(d, { id: "e:" + d, k: "py", t: pdc === "kpy" ? "Python no Kaggle" : "Pandas no Kaggle", m: 15, h: addT(T.study, 95), c: pdc, link: LINKS[pdc], desc: "Uma lição curta. Em inglês, então conta como inglês técnico também." }); }
+      else if (!(d >= SQL_BASIC[0] && d <= SQL_BASIC[1])) push(d, { id: "e:" + d, k: "en", t: "Inglês técnico", m: 15, h: addT(T.study, 95), c: "en", link: LINKS.pbidocs, desc: "Leia uma página da documentação do Power BI em inglês ou veja um vídeo curto da área." });
+      if (d >= SQL_BASIC[0] && d <= SQL_BASIC[1]) push(d, { id: "q:" + d, k: "sqld", t: "SQL básico no SQLBolt", m: 20, h: addT(T.study, 95), c: "sqlbolt", link: LINKS.sqlbolt, desc: "SELECT, WHERE, GROUP BY, HAVING, INNER e LEFT JOIN, ORDER BY. É o que cai em quase todo teste de estágio." });
       if (d >= SQL_DAILY_FROM) push(d, { id: "q:" + d, k: "sqld", t: "SQL do dia", m: 15, h: addT(T.study, 110), c: "hr", link: LINKS.hackerrank, desc: "1 exercício no HackerRank, sem consultar." });
       const ten = d >= APPS_10_FROM;
       if ((!ten && (w === 2 || w === 4)) || (ten && !light && w !== 3) || (ten && light && (w === 2 || w === 4))) push(d, { id: "v:" + d, k: "vagas", t: "Candidaturas", m: 30, h: addT(T.study, 125), go: "vagas", desc: (ten ? "Meta: 10 por semana." : "Meta: 5 por semana.") + " Registre cada uma em Carreira › Vagas." });
@@ -1038,7 +1048,7 @@ function go(v, sub) {
 }
 function navHTML() {
   $("#nav").innerHTML = MAIN.map(m => '<button type="button" data-go="' + m[0] + '"' + (VIEW === m[0] ? ' aria-current="page"' : "") + ">" + ico(m[2]) + "<span>" + m[1] + "</span></button>").join("");
-  $("#drawerList").innerHTML = MENU.map(m => '<button type="button" class="dItem" data-go="' + m[0] + '"' + (VIEW === m[0] ? ' aria-current="page"' : "") + ">" + ico(m[2]) + "<span>" + m[1] + "</span></button>").join("") +
+  $("#drawerList").innerHTML = '<button type="button" class="dItem" id="dFocus">' + ico("focus") + "<span>Modo foco</span></button>" + MENU.map(m => '<button type="button" class="dItem" data-go="' + m[0] + '"' + (VIEW === m[0] ? ' aria-current="page"' : "") + ">" + ico(m[2]) + "<span>" + m[1] + "</span></button>").join("") +
     '<div class="dSep"></div><p class="dLbl">Atalhos</p>' +
     [["rev", "Flashcards"], ["sim", "Simulados"], ["li", "LinkedIn"], ["vagas", "Vagas"], ["ent", "Entrevista"], ["docs", "Documentos"]].map(a => '<button type="button" class="dItem sm" data-go="' + a[0] + '">' + a[1] + "</button>").join("") +
     '<div class="dSep"></div><p class="dFoot">Versão ' + APP_V + " · " + esc(NEWS[APP_V] || "") + "</p>";
@@ -1076,10 +1086,11 @@ function vHoje() {
   let h = "";
   if (t < START) {
     const n = diffD(t, START);
-    h += '<section class="hero"><p class="eyebrow">' + esc(fmtLong(t)) + '</p><h2>Seu plano começa em ' + n + (n === 1 ? " dia" : " dias") + "</h2><p class=\"muted\">Segunda, 16/11. Veja o primeiro dia:</p></section>";
+    h += '<section class="hero"><div class="heroTxt"><p class="eyebrow">' + esc(fmtLong(t)) + '</p><h2>Seu plano começa em ' + n + (n === 1 ? " dia" : " dias") + '</h2><p class="muted">Segunda, 16/11. Veja o primeiro dia:</p></div></section>';
+    h += '<div class="row gap"><button type="button" class="btn pri" id="focusGo">' + ico("focus") + 'Modo foco</button></div>';
     h += '<section class="card">' + dayTasks(START).map(x => taskRow(x)).join("") + "</section>";
   } else if (OFF[t]) {
-    h += '<section class="hero"><p class="eyebrow">' + esc(fmtLong(t)) + "</p><h2>Folga: " + esc(OFF[t]) + '</h2><p class="muted">Descanse. Amanhã a gente continua.</p></section>';
+    h += '<section class="hero"><div class="heroTxt"><p class="eyebrow">' + esc(fmtLong(t)) + "</p><h2>Folga: " + esc(OFF[t]) + '</h2><p class="muted">Descanse. Amanhã a gente continua.</p></div></section>';
   } else {
     const dn = list.filter(x => isDone(x.id)).length, nx = list.find(x => !isDone(x.id));
     const ph = phaseOf(t);
@@ -1113,7 +1124,7 @@ function openTask(id) {
     '<p class="lead">' + esc(t.desc) + "</p>" +
     (c ? '<div class="info"><p><b>' + esc(c.n) + '</b></p><p class="muted small">' + esc(c.onde) + " · " + esc(c.how) + "</p></div>" : "") +
     '<div class="row gap wrapr">' + (t.link ? '<a class="btn" href="' + esc(t.link) + '" target="_blank" rel="noopener">' + ico("link") + "Abrir curso</a>" : "") +
-    (t.go ? '<button type="button" class="btn" data-go="' + t.go + '">Ir para a tela</button>' : "") + "</div>" +
+    (t.go ? '<button type="button" class="btn" data-go="' + t.go + '">Ir para a tela</button>' : "") + (done ? "" : '<button type="button" class="btn" id="tFocus">' + ico("focus") + "Foco</button>") + "</div>" +
     '<div class="timerBox"><span class="tmBig" id="sheetTm">' + fmtTm(TM.id === id ? tmElapsed() : (ST.tm[id] ? ST.tm[id].min * 60 : 0)) + '</span><button type="button" class="btn" data-tm="' + id + '">' + ico(TM.id === id && TM.on ? "pause" : "play") + (TM.id === id && TM.on ? "Pausar" : "Cronômetro") + "</button></div>" +
     '<label class="fld"><span>O que aprendi</span><textarea id="diary" rows="3" placeholder="Uma ou duas frases. Vira ideia de post se você quiser.">' + esc((ST.diary[id] || {}).t || "") + "</textarea></label>" +
     '<div class="row gap wrapr"><button type="button" class="btn sm ghost" id="toIdea">Virar ideia de post</button></div>' +
@@ -1124,6 +1135,7 @@ function openTask(id) {
       $("#toIdea").onclick = () => { sv(); const v = (ST.diary[id] || {}).t; if (!v) return toast("Escreva o que aprendeu primeiro."); ST.li.ideas.push({ id: uid(), t: v, from: t.t, u: now() }); changed(); toast("Ideia salva em Carreira › LinkedIn."); };
       $("#mvD").onchange = e => { const v = e.target.value; if (!v) return; ST.moved[id] = { d: v, u: now() }; changed(); closeSheet(); render(); toast("Remarcada para " + fmtD(v) + "."); };
       $("#tDone").onclick = () => { sv(); setDone(id, !done); closeSheet(); };
+      if ($("#tFocus")) $("#tFocus").onclick = () => { sv(); closeSheet(); focusOpen(id); };
     });
 }
 function setDone(id, v) {
@@ -1151,22 +1163,41 @@ function tmStop(keep) {
   if (min > 0) { ST.tm[TM.id] = { min, u: now() }; ST.act[todayS()] = 1; changed(); }
   Object.assign(TM, { id: null, on: false, start: 0, acc: 0 }); tmSave(); tmTick();
 }
-function tmTick() { clearInterval(TM.t); if (TM.on) TM.t = setInterval(() => { const s = tmElapsed(); ["#sheetTm", "#fTm", "#tbTm"].forEach(q => { const e = $(q); if (e) e.textContent = fmtTm(s); }); const t = TASK[TM.id]; if (t && s === t.m * 60) { beep(); notify("Tempo planejado concluído", t.t); } }, 1000); }
+function tmTick() { clearInterval(TM.t); if (TM.on) TM.t = setInterval(() => { const s = tmElapsed(); ["#sheetTm", "#fTm", "#tbTm"].forEach(q => { const e = $(q); if (e) e.textContent = fmtTm(s); }); focusRing(); const t = TASK[TM.id]; if (t && s === t.m * 60) { beep(); notify("Tempo planejado concluído", t.t); } }, 1000); }
 function timerBar() {
   const b = $("#tbar"); if (!TM.id || !TASK[TM.id]) { b.classList.remove("on"); return; }
   b.classList.add("on");
   b.innerHTML = '<button type="button" class="tbT" data-open="' + TM.id + '">' + esc(TASK[TM.id].t) + '</button><span id="tbTm" class="num">' + fmtTm(tmElapsed()) + '</span><button type="button" class="ibtn" data-tm="' + TM.id + '" aria-label="' + (TM.on ? "Pausar" : "Continuar") + '">' + ico(TM.on ? "pause" : "play") + '</button><button type="button" class="ibtn" id="tbFocus" aria-label="Modo foco">' + ico("focus") + "</button>";
 }
 function beep() { try { const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 660; g.gain.value = .08; o.start(); o.stop(a.currentTime + .4); } catch (e) { } }
-function focusOpen() {
-  const t = todayS(); let id = TM.id || (dayTasks(t).find(x => !isDone(x.id)) || {}).id; if (!id) return toast("Nenhuma tarefa aberta hoje.");
-  const tk = TASK[id], f = $("#focus");
-  f.innerHTML = '<button type="button" class="ibtn fX" id="fX" aria-label="Sair do modo foco">' + ico("x") + '</button><div class="fIn"><p class="eyebrow">' + KIND[tk.k] + " · " + hm(tk.m) + "</p><h2>" + esc(tk.t) + '</h2><p class="muted">' + esc(tk.desc) + '</p><p class="fTm num" id="fTm">' + fmtTm(TM.id === id ? tmElapsed() : 0) + '</p><div class="row gap center"><button type="button" class="btn pri" id="fGo">' + ico(TM.id === id && TM.on ? "pause" : "play") + (TM.id === id && TM.on ? "Pausar" : "Começar") + '</button><button type="button" class="btn" id="fOk">' + ico("check") + "Concluir</button></div></div>";
-  f.classList.add("on");
-  $("#fX").onclick = () => f.classList.remove("on");
-  $("#fGo").onclick = () => { tmToggle(id); const on = TM.id === id && TM.on; $("#fGo").innerHTML = ico(on ? "pause" : "play") + (on ? "Pausar" : "Começar"); };
-  $("#fOk").onclick = () => { setDone(id, true); f.classList.remove("on"); };
+/* modo foco: só a tarefa atual, o tempo e o próximo passo. Mantém a tela acesa. */
+let WL = null;
+async function wakeOn() { try { if ("wakeLock" in navigator && !WL) { WL = await navigator.wakeLock.request("screen"); WL.addEventListener("release", () => WL = null); } } catch (e) { WL = null; } }
+function wakeOff() { try { if (WL) WL.release(); } catch (e) { } WL = null; }
+function focusRing() {
+  const r = $("#fRing"); if (!r || !TM.id || !TASK[TM.id]) return;
+  const p = Math.min(1, tmElapsed() / (TASK[TM.id].m * 60)), c = 2 * Math.PI * 88;
+  r.setAttribute("stroke-dashoffset", c * (1 - p));
+  const left = $("#fLeft"); if (left) { const rest = TASK[TM.id].m * 60 - tmElapsed(); left.textContent = rest > 0 ? "faltam " + Math.ceil(rest / 60) + " min" : "tempo planejado concluído"; }
 }
+function focusOpen(id) {
+  const t = todayS();
+  id = id || TM.id || (dayTasks(t).find(x => !isDone(x.id)) || {}).id || (t < START && !$("#focus").classList.contains("on") ? (dayTasks(START).find(x => !isDone(x.id)) || {}).id : null);
+  const f = $("#focus");
+  if (!id) { if (f.classList.contains("on")) { f.innerHTML = '<button type="button" class="ibtn fX" id="fX" aria-label="Sair do modo foco">' + ico("x") + '</button><div class="fIn"><p class="fBig">✓</p><h2>Dia concluído</h2><p class="muted">Muito bem. Descanse.</p><button type="button" class="btn pri" id="fOut">Sair do foco</button></div>'; $("#fX").onclick = $("#fOut").onclick = focusClose; return; } return toast("Nenhuma tarefa aberta hoje."); }
+  const tk = TASK[id], on = TM.id === id && TM.on, el = TM.id === id ? tmElapsed() : (ST.tm[id] ? ST.tm[id].min * 60 : 0), c = 2 * Math.PI * 88;
+  const nx = dayTasks(tk.d).find(x => !isDone(x.id) && x.id !== id);
+  f.innerHTML = '<button type="button" class="ibtn fX" id="fX" aria-label="Sair do modo foco">' + ico("x") + '</button><div class="fIn"><p class="eyebrow">' + KIND[tk.k] + " · " + hm(tk.m) + "</p><h2>" + esc(tk.t) + '</h2><p class="muted fDesc">' + esc(tk.desc) + "</p>" +
+    '<div class="fClock"><svg viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="88" class="rBg"/><circle id="fRing" cx="100" cy="100" r="88" class="rFg" stroke-dasharray="' + c + '" stroke-dashoffset="' + c * (1 - Math.min(1, el / (tk.m * 60))) + '"/></svg><div><p class="fTm num" id="fTm">' + fmtTm(el) + '</p><p class="muted small" id="fLeft">' + hm(tk.m) + " planejados</p></div></div>" +
+    '<div class="row gap center"><button type="button" class="btn pri" id="fGo">' + ico(on ? "pause" : "play") + (on ? "Pausar" : "Começar") + '</button><button type="button" class="btn" id="fOk">' + ico("check") + "Concluir</button></div>" +
+    (tk.link ? '<p><a class="link" href="' + esc(tk.link) + '" target="_blank" rel="noopener">Abrir o curso</a></p>' : "") +
+    (nx ? '<p class="muted small fNext">Depois: ' + esc(nx.t) + "</p>" : "") + "</div>";
+  f.classList.add("on"); document.body.classList.add("lock"); wakeOn(); focusRing();
+  $("#fX").onclick = focusClose;
+  $("#fGo").onclick = () => { tmToggle(id); const o = TM.id === id && TM.on; $("#fGo").innerHTML = ico(o ? "pause" : "play") + (o ? "Pausar" : "Começar"); };
+  $("#fOk").onclick = () => { setDone(id, true); const n = dayTasks(tk.d).find(x => !isDone(x.id)); focusOpen(n ? n.id : null); if (n) toast("Feito! Próxima: " + n.t); };
+}
+function focusClose() { $("#focus").classList.remove("on"); document.body.classList.remove("lock"); wakeOff(); }
 
 /* ---------- AGENDA ---------- */
 let AG = { mode: "sem", ref: null, sel: null };
@@ -1228,7 +1259,7 @@ function vCursos() {
 }
 
 /* flashcards com revisão espaçada */
-function allCards() { return CARDS.map((c, i) => ({ id: "c" + i, deck: c[0], q: c[1], a: c[2] })).concat(ST.myCards.filter(c => !c.del)); }
+function allCards() { return CARDS.map((c, i) => ({ id: "c" + i, deck: c[0], q: c[1], a: c[2] })).filter(c => c.deck !== "py" || todayS() >= PY_FROM).concat(ST.myCards.filter(c => !c.del)); }
 function srsQueue(deck) {
   const t = todayS(), cards = allCards().filter(c => !deck || c.deck === deck);
   const due = cards.filter(c => ST.srs[c.id] && ST.srs[c.id].due <= t);
@@ -1421,7 +1452,7 @@ function vProg() {
   h += '<section class="card"><div class="stats3"><div><b>' + st + "</b><span>dias seguidos</span></div><div><b>" + hm(s.mins).replace(" min", "min") + "</b><span>estudadas</span></div><div><b>" + liStreak() + '</b><span>semanas postando</span></div></div><div class="stats3"><div><b>' + wkDone + "<small>/" + wkAll + "</small></b><span>tarefas na semana</span></div><div><b>" + s.reviews + "</b><span>revisões</span></div><div><b>" + s.apps + "</b><span>candidaturas</span></div></div></section>";
   h += '<section class="card"><h3 class="cardH">Medalhas</h3><div class="medals">' + medals().map(m => '<div class="medal' + (m.ok ? " ok" : "") + '" title="' + esc(m.d) + '"><span>' + (m.ok ? "★" : "☆") + "</span><b>" + esc(m.n) + "</b><small>" + esc(m.d) + "</small></div>").join("") + "</div></section>";
   h += '<section class="card"><h3 class="cardH">Últimas 8 semanas</h3>' + weeksChart() + "</section>";
-  h += '<section class="card"><h3 class="cardH">Revisão do mês</h3>' + monthReview() + '<button type="button" class="btn sm" id="printRep">Relatório para imprimir (PDF)</button></section>';
+  h += '<section class="card"><h3 class="cardH">Revisão do mês</h3>' + monthReview() + (IN_CLAUDE ? "" : '<button type="button" class="btn sm" id="printRep">Relatório para imprimir (PDF)</button>') + "</section>";
   h += '<p class="center"><button type="button" class="link" data-go="rota">Ver rota de níveis e competências</button></p>';
   return h;
 }
@@ -1471,7 +1502,7 @@ function vConfig() {
   const np = "Notification" in window ? Notification.permission : "unsupported";
   h += grp("avisos", "Avisos", '<p class="muted small">Lembretes do post de quarta, resumo da semana no domingo à noite e lembretes das tarefas nos horários da rotina. Funcionam com o app aberto ou em segundo plano no celular.</p>' + (np === "unsupported" ? '<p class="muted">Este navegador não mostra notificações.</p>' : '<label class="chkRow"><input type="checkbox" id="notifOn"' + (c.notif && np === "granted" ? " checked" : "") + "><span>Receber avisos</span></label>" + (np === "denied" ? '<p class="pill warn">As notificações estão bloqueadas no navegador. Libere nas permissões do site.</p>' : "")));
   h += grp("sync", "Sincronização", syncPanel());
-  h += grp("dados", "Dados", '<p class="muted small">Seu progresso fica neste aparelho e, se você ligar a sincronização, também na sua nuvem.</p><div class="row gap wrapr"><button type="button" class="btn sm" id="expB">Exportar backup</button><label class="btn sm">Importar backup<input type="file" id="impB" accept="application/json" hidden></label></div><p class="muted small">Versão ' + APP_V + " · " + esc(NEWS[APP_V]) + '</p><button type="button" class="btn sm ghost danger" id="resetAll">Apagar tudo deste aparelho</button>');
+  h += grp("dados", "Dados", '<p class="muted small">Seu progresso fica neste aparelho e, se você ligar a sincronização, também na sua nuvem.</p><div class="row gap wrapr">' + (IN_CLAUDE ? "" : '<button type="button" class="btn sm" id="expB">Exportar backup</button>') + '<label class="btn sm">Importar backup<input type="file" id="impB" accept="application/json" hidden></label></div><p class="muted small">Versão ' + APP_V + " · " + esc(NEWS[APP_V]) + '</p><button type="button" class="btn sm ghost danger" id="resetAll">Apagar tudo deste aparelho</button>');
   return h;
 }
 let CFGOPEN = "";
@@ -1568,7 +1599,7 @@ function wire() {
     if (n === "est") { SUB.estudar = s; RV.q = null; SIM = null; } else if (n === "car") SUB.carreira = s; else if (n === "ag") AG.mode = s; else if (n === "lis") LIS = s; else if (n === "pj") PJ = s; else if (n === "cv") CV = s;
     if (n === "est" || n === "car") go(VIEW, s); else render();
   });
-  on("focusGo", focusOpen);
+  on("focusGo", () => focusOpen());
   on("odToday", () => { const t = todayS(); overdue().forEach(x => ST.moved[x.id] = { d: t, u: now() }); changed(); render(); toast("Trazidas para hoje."); });
   on("odSkip", () => { const ids = overdue().map(x => x.id); ids.forEach(id => ST.skip[id] = now()); changed(); render(); toast(ids.length + " puladas.", ["Desfazer", () => { ids.forEach(id => delete ST.skip[id]); changed(); render(); }]); });
   on("quickApp", () => appSheet(null));
@@ -1666,16 +1697,16 @@ function init() {
   $("#drawerX").innerHTML = ico("x"); $("#drawerX").onclick = closeDrawer;
   $("#scrim").onclick = () => { closeSheet(); closeDrawer(); };
   $("#nav").onclick = e => { const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); };
-  $("#drawerList").onclick = e => { const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); };
+  $("#drawerList").onclick = e => { if (e.target.closest("#dFocus")) { closeDrawer(); return focusOpen(); } const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); };
   $("#tbar").onclick = e => { const b = e.target.closest("[data-tm]"); if (b) return tmToggle(b.dataset.tm); const o = e.target.closest("[data-open]"); if (o) return openTask(o.dataset.open); if (e.target.closest("#tbFocus")) focusOpen(); };
   $("#sync").onclick = () => { CFGOPEN = "sync"; go("config"); };
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet(); closeDrawer(); $("#focus").classList.remove("on"); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet(); closeDrawer(); if ($("#focus").classList.contains("on")) focusClose(); } });
   if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setTheme);
   const q = new URLSearchParams(location.search).get("v"), hsh = (location.hash || "").slice(1).split("/");
   const start = q || hsh[0]; if (start) { if (ALIAS[start]) { SUB[ALIAS[start][0]] = ALIAS[start][1]; VIEW = ALIAS[start][0]; } else if (["hoje", "agenda", "estudar", "carreira", "port", "prog", "rota", "config"].includes(start)) { VIEW = start; if (hsh[1]) SUB[start] = hsh[1]; } }
   render(); tmTick(); showNews(); schedNotifs();
   if (CL.code) syncNow().then(() => render());
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { if (CL.code) syncNow().then(() => render()); else render(); } });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { if ($("#focus").classList.contains("on")) wakeOn(); if (CL.code) syncNow().then(() => render()); else render(); } });
 }
 init();
 </script><script>if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost")){const sw=navigator.serviceWorker;let had=!!sw.controller;sw.register("sw.js",{scope:"./"}).then(r=>{document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")r.update().catch(()=>{});});}).catch(()=>{});sw.addEventListener("controllerchange",()=>{if(had){if(typeof swUpdated==="function")swUpdated();else location.reload();}had=true;});}</script></body></html>

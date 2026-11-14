@@ -1,0 +1,838 @@
+/* ================= LÓGICA DO APP ================= */
+const APP_V = 1;
+const KEY = "pcd-v1";                       /* armazenamento só deste app */
+const SB_URL = "https://rqqdrodlmduppobcyjxb.supabase.co", SB_KEY = "sb_publishable_R3J3AOxxdrdrymgwoKU_rg_WPl5GJq-";
+
+/* ---------- utilidades ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const now = () => Date.now();
+const uid = () => Math.random().toString(36).slice(2, 9) + now().toString(36).slice(-4);
+const pad = n => String(n).padStart(2, "0");
+const ds = dt => dt.getFullYear() + "-" + pad(dt.getMonth() + 1) + "-" + pad(dt.getDate());
+const pd = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d, 12); };
+const addD = (s, n) => { const d = pd(s); d.setDate(d.getDate() + n); return ds(d); };
+const dow = s => pd(s).getDay();
+const diffD = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
+const todayS = () => ds(new Date());
+const mondayOf = s => addD(s, -((dow(s) + 6) % 7));
+const DOW = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const DOWL = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const MON = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MONL = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const fmtD = s => { const d = pd(s); return pad(d.getDate()) + "/" + pad(d.getMonth() + 1); };
+const fmtLong = s => { const d = pd(s); return DOWL[d.getDay()] + ", " + d.getDate() + " de " + MONL[d.getMonth()]; };
+const hm = m => m >= 60 ? Math.floor(m / 60) + "h" + (m % 60 ? pad(m % 60) : "") : m + " min";
+const IN_CLAUDE = !!(window.claude && window.claude.use) || !/(github\.io|^localhost|^127\.0\.0\.1)$/.test(location.hostname) && location.protocol !== "file:";
+let toastT;
+function toast(m, act) {
+  const t = $("#toast"); t.innerHTML = esc(m) + (act ? ' <button type="button" id="toastAct">' + esc(act[0]) + "</button>" : "");
+  t.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("on"), act ? 5000 : 2600);
+  if (act) $("#toastAct").onclick = () => { t.classList.remove("on"); act[1](); };
+}
+async function copyText(txt) {
+  try { await navigator.clipboard.writeText(txt); toast("Copiado."); }
+  catch (e) { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); toast("Copiado."); } catch (x) { toast("Não deu para copiar. Selecione o texto."); } ta.remove(); }
+}
+const ICON = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  hoje: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  agenda: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  estudar: '<path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2zM22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z"/>',
+  carreira: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>',
+  port: '<path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>',
+  prog: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  rota: '<path d="M3 17l6-6 4 4 8-8M14 7h7v7"/>',
+  cfg: '<circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+  x: '<path d="M18 6L6 18M6 6l12 12"/>',
+  play: '<path d="M7 4l13 8-13 8z"/>', pause: '<path d="M7 4h4v16H7zM14 4h4v16h-4z"/>',
+  focus: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+  left: '<path d="M15 18l-6-6 6-6"/>', right: '<path d="M9 18l6-6-6-6"/>',
+  sound: '<path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  li: '<path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2zM4 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>',
+  cloud: '<path d="M18 10h-1.3A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>'
+};
+const ico = (n, cls) => '<svg class="ic ' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[n] + "</svg>";
+
+/* ---------- estado ---------- */
+const DEF_CFG = { theme: "auto", cards: { late: 1, li: 1, ms: 1, apps: 1, srs: 1 }, times: { flash: "12:10", li: "13:30", study: "14:00", sat: "09:00" }, notif: 0, hired: null };
+let ST = load();
+function load() {
+  let s = null; try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { }
+  s = s && typeof s === "object" ? s : {};
+  const base = { done: {}, skip: {}, moved: {}, tm: {}, diary: {}, act: {}, srs: {}, myCards: [], apps: [], stories: [], contacts: [], certs: [], kanban: {}, steps: {}, texts: {}, li: { posted: {}, week: {}, prof: {}, ideas: [], drafts: {} }, skills: {}, quiz: [], cfg: {}, upd: 0 };
+  for (const k in base) if (s[k] == null) s[k] = base[k];
+  for (const k in base.li) if (s.li[k] == null) s.li[k] = base.li[k];
+  s.cfg = Object.assign({}, DEF_CFG, s.cfg); s.cfg.cards = Object.assign({}, DEF_CFG.cards, s.cfg.cards); s.cfg.times = Object.assign({}, DEF_CFG.times, s.cfg.times);
+  return s;
+}
+function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (e) { } }
+function changed() { ST.upd = now(); saveLocal(); syncKick(); }
+const isDone = id => (ST.done[id] || 0) > 0;
+const isSkip = id => (ST.skip[id] || 0) > 0;
+function markAct() { ST.act[todayS()] = 1; }
+
+/* ---------- cronograma ---------- */
+let SCHED = {}, TASK = {};
+const KIND = { estudo: "Estudo", flash: "Flashcards", li: "LinkedIn", en: "Inglês", py: "Python", sqld: "SQL", vagas: "Vagas", proj: "Projeto", rev: "Revisão", acel: "Acelerador", unico: "Tarefa" };
+const phaseOf = d => PHASES.find(p => d >= p.a && d <= p.b) || null;
+const isLight = d => d >= LIGHT[0] && d <= LIGHT[1];
+const weekN = d => Math.floor(diffD(START, d) / 7) + 1;
+function postFor(wed) { return LI.cal.find(c => c[0] === wed) || null; }
+function ideaTitle(ref) { const i = LI.ideas.find(x => x[0] === ref); return i ? i[1] : ref; }
+function build() {
+  const S = {}, cnt = {};
+  const T = ST.cfg.times;
+  const push = (d, o) => { (S[d] = S[d] || []).push(Object.assign({ d, desc: "", m: 15 }, o)); };
+  for (let d = START; d <= AFTER_END; d = addD(d, 1)) {
+    if (OFF[d]) continue;
+    const w = dow(d), ph = phaseOf(d), light = isLight(d), wk = d <= END ? weekN(d) : 0, wd = w >= 1 && w <= 5;
+    push(d, { id: "f:" + d, k: "flash", t: "Flashcards", m: 10, h: wd ? T.flash : "10:00", desc: wd ? "No caminho de volta, no modo áudio, ou 10 min na aba Estudar › Revisar." : "10 min na aba Estudar › Revisar.", go: "rev" });
+    const lid = (light ? LI.dailyLight : LI.daily)[w];
+    if (lid) {
+      let desc = lid[1];
+      if (w === 0) { const p = postFor(addD(d, 3)); if (p) desc += " Tema: " + p[1] + " · " + ideaTitle(p[2]) + "."; }
+      push(d, { id: "l:" + d, k: "li", t: "LinkedIn: " + lid[0], m: w === 0 ? 20 : 10, h: w === 0 ? "18:00" : T.li, desc, go: "li" });
+    }
+    if (wd && ph) {
+      cnt[ph.id] = (cnt[ph.id] || 0) + 1;
+      const s = ph.s[(cnt[ph.id] - 1) % ph.s.length];
+      const c = COURSES.find(x => x.id === ph.c);
+      push(d, { id: "s:" + d, k: "estudo", t: s[0], m: 90, h: T.study, ph: ph.id, c: ph.c, link: c ? c.link : "", desc: "45 min de conteúdo + 45 min de prática. " + s[1] + " No fim, explique em voz alta por 2 min, como se fosse para um gestor." });
+      const py = (w === 2 || w === 4) && d >= PY_FROM;
+      if (py) { const pdc = d < "2027-05-17" ? "kpy" : "kpd"; push(d, { id: "e:" + d, k: "py", t: pdc === "kpy" ? "Python no Kaggle" : "Pandas no Kaggle", m: 15, h: addT(T.study, 95), c: pdc, link: LINKS[pdc], desc: "Uma lição curta. Em inglês, então conta como inglês técnico também." }); }
+      else if (!(d >= SQL_BASIC[0] && d <= SQL_BASIC[1])) push(d, { id: "e:" + d, k: "en", t: "Inglês técnico", m: 15, h: addT(T.study, 95), c: "en", link: LINKS.pbidocs, desc: "Leia uma página da documentação do Power BI em inglês ou veja um vídeo curto da área." });
+      if (d >= SQL_BASIC[0] && d <= SQL_BASIC[1]) push(d, { id: "q:" + d, k: "sqld", t: "SQL básico no SQLBolt", m: 20, h: addT(T.study, 95), c: "sqlbolt", link: LINKS.sqlbolt, desc: "SELECT, WHERE, GROUP BY, HAVING, INNER e LEFT JOIN, ORDER BY. É o que cai em quase todo teste de estágio." });
+      if (d >= SQL_DAILY_FROM) push(d, { id: "q:" + d, k: "sqld", t: "SQL do dia", m: 15, h: addT(T.study, 110), c: "hr", link: LINKS.hackerrank, desc: "1 exercício no HackerRank, sem consultar." });
+      const ten = d >= APPS_10_FROM;
+      if ((!ten && (w === 2 || w === 4)) || (ten && !light && w !== 3) || (ten && light && (w === 2 || w === 4))) push(d, { id: "v:" + d, k: "vagas", t: "Candidaturas", m: 30, h: addT(T.study, 125), go: "vagas", desc: (ten ? "Meta: 10 por semana." : "Meta: 5 por semana.") + " Registre cada uma em Carreira › Vagas." });
+      if (w === 5 && !light && d <= END) {
+        push(d, { id: "a:" + d, k: "acel", t: "Simulado de entrevista", m: 20, h: addT(T.study, 160), go: "sim", desc: "3 perguntas sorteadas. Grave as respostas no celular e assista." });
+        if (wk % 2 === 0) push(d, { id: "r:" + d, k: "acel", t: "Mini-relatório quinzenal", m: 60, h: addT(T.study, 185), desc: "Uma pergunta de negócio, uma base pública (IBGE, Banco Central ou CVM) e uma página no Power BI. Vira post e assunto de entrevista.", link: LINKS.ibge });
+      }
+    }
+    if (w === 6 && ph) {
+      const test = pd(d).getDate() <= 7 && d >= "2026-12-01" && !light;
+      if (test) push(d, { id: "p:" + d, k: "acel", t: "Teste técnico simulado", m: 120, h: T.sat, desc: "Um case de 2 h: uma base, 5 perguntas e 1 painel. Cronometre." });
+      else { cnt[ph.id + "s"] = (cnt[ph.id + "s"] || 0) + 1; push(d, { id: "p:" + d, k: "proj", t: ph.sat[(cnt[ph.id + "s"] - 1) % ph.sat.length], m: 180, h: T.sat, go: "port", desc: "3 h no projeto ou entregável da etapa. Se a semana apertar, corte conteúdo, nunca o sábado." }); }
+    }
+    if (w === 0) {
+      push(d, { id: "w:" + d, k: "rev", t: "Revisão da semana", m: 30, h: "17:30", desc: "Veja o que ficou para trás, remarque e confira a semana que vem. Passe na Data Hackers." });
+      if (pd(addD(d, 7)).getMonth() !== pd(d).getMonth()) push(d, { id: "m:" + d, k: "rev", t: "Atualizar notas das competências", m: 5, h: "17:25", go: "rota", desc: "Uma vez por mês: dê nota de 1 a 5 em cada competência." });
+    }
+  }
+  ONE_OFF.forEach((o, i) => push(o.d, Object.assign({ id: "u" + i + ":" + o.d, h: "13:45" }, o)));
+  /* remarcadas */
+  const all = {}; Object.values(S).forEach(a => a.forEach(t => all[t.id] = t));
+  for (const id in ST.moved) { const t = all[id], mv = ST.moved[id]; if (!t || !mv || !mv.d || mv.d === t.d) continue; S[t.d] = (S[t.d] || []).filter(x => x.id !== id); t.orig = t.d; t.d = mv.d; (S[mv.d] = S[mv.d] || []).push(t); }
+  for (const d in S) S[d].sort((a, b) => (a.h || "").localeCompare(b.h || ""));
+  SCHED = S; TASK = all;
+}
+function addT(h, m) { const [a, b] = h.split(":").map(Number); const t = a * 60 + b + m; return pad(Math.floor(t / 60) % 24) + ":" + pad(t % 60); }
+const dayTasks = d => SCHED[d] || [];
+const MATTERS = t => !["flash", "li", "rev"].includes(t.k);
+function overdue() { const t = todayS(), out = []; for (const d in SCHED) if (d < t && d >= START) SCHED[d].forEach(x => { if (MATTERS(x) && !isDone(x.id) && !isSkip(x.id)) out.push(x); }); return out.sort((a, b) => a.d.localeCompare(b.d)); }
+
+/* ---------- XP, sequência, horas ---------- */
+const STUDY_K = ["estudo", "en", "py", "sqld", "proj", "acel", "flash"];
+function minsOf(id) { const t = TASK[id]; const tm = ST.tm[id]; return tm && tm.min ? tm.min : (t ? t.m : 0); }
+function stats() {
+  let xp = 0, mins = 0, doneN = 0;
+  for (const id in ST.done) if (ST.done[id] > 0) { const t = TASK[id]; doneN++; xp += Math.max(5, Math.round(minsOf(id) / 3)); if (t && STUDY_K.includes(t.k)) mins += minsOf(id); }
+  const reviews = Object.values(ST.srs).reduce((s, c) => s + (c.n || 0), 0);
+  const apps = ST.apps.filter(a => !a.del).length, posts = Object.values(ST.li.posted).filter(p => p && p.ok).length;
+  xp += reviews + apps * 5 + posts * 15 + ST.stories.filter(s => !s.del).length * 10;
+  const lvl = Math.floor(Math.sqrt(xp / 40)) + 1, cur = 40 * Math.pow(lvl - 1, 2), nxt = 40 * Math.pow(lvl, 2);
+  return { xp, lvl, pct: Math.round((xp - cur) / (nxt - cur) * 100), toNext: nxt - xp, mins, doneN, reviews, apps, posts };
+}
+function streak() {
+  let d = todayS(), n = 0; if (!ST.act[d]) d = addD(d, -1);
+  for (let i = 0; i < 800; i++) { if (ST.act[d]) n++; else if (!OFF[d]) break; d = addD(d, -1); }
+  return n;
+}
+function liStreak() { let n = 0; const t = todayS(); for (let i = LI.cal.length - 1; i >= 0; i--) { const c = LI.cal[i]; if (c[0] > t) continue; const p = ST.li.posted[c[0]]; if (p && p.ok) n++; else if (c[0] < t) break; } return n; }
+function weekApps(mon) { const end = addD(mon, 6); return ST.apps.filter(a => !a.del && a.data >= mon && a.data <= end).length; }
+const appsGoal = d => d >= APPS_10_FROM ? 10 : 5;
+function medals() {
+  const s = stats(), st = streak(), p1 = PROJECTS[0].steps.every((_, i) => ST.steps["p1:" + i]), p2 = PROJECTS[1].steps.every((_, i) => ST.steps["p2:" + i]);
+  const got = { first: s.doneN > 0, s7: st >= 7, s30: st >= 30, c100: s.reviews >= 100, a10: s.apps >= 10, a50: s.apps >= 50, p4: s.posts >= 4, h20: s.mins >= 1200, proj1: p1, proj2: p2, star5: ST.stories.filter(x => !x.del).length >= 5, hired: !!ST.cfg.hired };
+  return MEDALS.map(m => ({ id: m[0], n: m[1], d: m[2], ok: got[m[0]] }));
+}
+
+/* ---------- navegação ---------- */
+const MAIN = [["hoje", "Hoje", "hoje"], ["agenda", "Agenda", "agenda"], ["estudar", "Estudar", "estudar"], ["carreira", "Carreira", "carreira"]];
+const MENU = [["port", "Portfólio", "port"], ["prog", "Progresso", "prog"], ["rota", "Rota e competências", "rota"], ["config", "Configurações", "cfg"]];
+const ALIAS = { rev: ["estudar", "rev"], sim: ["estudar", "sim"], cursos: ["estudar", "cursos"], li: ["carreira", "li"], vagas: ["carreira", "vagas"], ent: ["carreira", "ent"], docs: ["carreira", "docs"] };
+let VIEW = "hoje"; const SUB = { estudar: "cursos", carreira: "li" };
+function go(v, sub) {
+  if (ALIAS[v]) { sub = ALIAS[v][1]; v = ALIAS[v][0]; }
+  if (sub) SUB[v] = sub;
+  VIEW = v; closeDrawer(); render(); window.scrollTo(0, 0);
+  try { history.replaceState(null, "", "#" + v + (SUB[v] && (v === "estudar" || v === "carreira") ? "/" + SUB[v] : "")); } catch (e) { }
+}
+function navHTML() {
+  $("#nav").innerHTML = MAIN.map(m => '<button type="button" data-go="' + m[0] + '"' + (VIEW === m[0] ? ' aria-current="page"' : "") + ">" + ico(m[2]) + "<span>" + m[1] + "</span></button>").join("");
+  $("#drawerList").innerHTML = '<button type="button" class="dItem" id="dFocus">' + ico("focus") + "<span>Modo foco</span></button>" + MENU.map(m => '<button type="button" class="dItem" data-go="' + m[0] + '"' + (VIEW === m[0] ? ' aria-current="page"' : "") + ">" + ico(m[2]) + "<span>" + m[1] + "</span></button>").join("") +
+    '<div class="dSep"></div><p class="dLbl">Atalhos</p>' +
+    [["rev", "Flashcards"], ["sim", "Simulados"], ["li", "LinkedIn"], ["vagas", "Vagas"], ["ent", "Entrevista"], ["docs", "Documentos"]].map(a => '<button type="button" class="dItem sm" data-go="' + a[0] + '">' + a[1] + "</button>").join("") +
+    '<div class="dSep"></div><p class="dFoot">Versão ' + APP_V + " · " + esc(NEWS[APP_V] || "") + "</p>";
+}
+function openDrawer() { $("#drawer").classList.add("on"); $("#scrim").classList.add("on"); $("#drawer").setAttribute("aria-hidden", "false"); const f = $("#drawer .dItem"); if (f) f.focus(); }
+function closeDrawer() { const d = $("#drawer"); if (!d) return; d.classList.remove("on"); $("#scrim").classList.remove("on"); d.setAttribute("aria-hidden", "true"); }
+
+function render() {
+  build();
+  navHTML();
+  const V = { hoje: vHoje, agenda: vAgenda, estudar: vEstudar, carreira: vCarreira, port: vPort, prog: vProg, rota: vRota, config: vConfig }[VIEW] || vHoje;
+  $("#view").innerHTML = V();
+  $("#title").textContent = { hoje: "Hoje", agenda: "Agenda", estudar: "Estudar", carreira: "Carreira", port: "Portfólio", prog: "Progresso", rota: "Rota e competências", config: "Configurações" }[VIEW];
+  const s = streak(); $("#streak").innerHTML = s ? "<b>" + s + "</b> " + (s === 1 ? "dia" : "dias") : "";
+  $("#streak").title = "Sequência de dias com estudo";
+  syncDot(); wire(); timerBar();
+}
+
+/* ---------- componentes ---------- */
+function taskRow(t, opts) {
+  opts = opts || {};
+  const done = isDone(t.id), run = TM.id === t.id;
+  return '<div class="task' + (done ? " done" : "") + (run ? " run" : "") + '" data-t="' + t.id + '">' +
+    '<label class="chk"><input type="checkbox" data-chk="' + t.id + '"' + (done ? " checked" : "") + ' aria-label="Marcar ' + esc(t.t) + ' como feita"><span></span></label>' +
+    '<button type="button" class="tBody" data-open="' + t.id + '"><span class="tT">' + esc(t.t) + '</span><span class="tM"><i class="k-' + t.k + '"></i>' + KIND[t.k] + " · " + hm(t.m) + (opts.date ? " · " + fmtD(t.d) : (t.h ? " · " + t.h : "")) + (t.orig ? " · remarcada" : "") + "</span></button>" +
+    (done ? "" : '<button type="button" class="ibtn" data-tm="' + t.id + '" aria-label="' + (run ? "Pausar" : "Iniciar") + ' cronômetro">' + ico(run && TM.on ? "pause" : "play") + "</button>") + "</div>";
+}
+function seg(name, items, cur) { return '<div class="seg" role="tablist">' + items.map(i => '<button type="button" role="tab" data-seg="' + name + '" data-s="' + i[0] + '" aria-selected="' + (cur === i[0]) + '">' + i[1] + "</button>").join("") + "</div>"; }
+const empty = (t, s) => '<div class="empty"><p><b>' + esc(t) + "</b></p>" + (s ? "<p>" + esc(s) + "</p>" : "") + "</div>";
+function ring(p, label) { const r = 26, c = 2 * Math.PI * r; return '<svg class="ring" viewBox="0 0 64 64" role="img" aria-label="' + esc(label) + '"><circle cx="32" cy="32" r="' + r + '" class="rBg"/><circle cx="32" cy="32" r="' + r + '" class="rFg" stroke-dasharray="' + c + '" stroke-dashoffset="' + (c * (1 - p)) + '"/></svg>'; }
+
+/* ---------- HOJE ---------- */
+function vHoje() {
+  const t = todayS(), list = dayTasks(t), C = ST.cfg.cards;
+  let h = "";
+  if (t < START) {
+    const n = diffD(t, START);
+    h += '<section class="hero"><div class="heroTxt"><p class="eyebrow">' + esc(fmtLong(t)) + '</p><h2>Seu plano começa em ' + n + (n === 1 ? " dia" : " dias") + '</h2><p class="muted">Segunda, 16/11. Veja o primeiro dia:</p></div></section>';
+    h += '<div class="row gap"><button type="button" class="btn pri" id="focusGo">' + ico("focus") + 'Modo foco</button></div>';
+    h += '<section class="card">' + dayTasks(START).map(x => taskRow(x)).join("") + "</section>";
+  } else if (OFF[t]) {
+    h += '<section class="hero"><div class="heroTxt"><p class="eyebrow">' + esc(fmtLong(t)) + "</p><h2>Folga: " + esc(OFF[t]) + '</h2><p class="muted">Descanse. Amanhã a gente continua.</p></div></section>';
+  } else {
+    const dn = list.filter(x => isDone(x.id)).length, nx = list.find(x => !isDone(x.id));
+    const ph = phaseOf(t);
+    h += '<section class="hero"><div class="heroTxt"><p class="eyebrow">' + esc(fmtLong(t)) + (ph && t <= END ? " · semana " + weekN(t) : "") + "</p><h2>" + (nx ? (dn ? "Continue: " : "Comece por: ") + esc(nx.t) : list.length ? "Dia concluído. Muito bem!" : "Nada marcado para hoje") + "</h2>" +
+      (ph ? '<p class="muted">' + esc(ph.n) + " · " + esc(ph.goal) + "</p>" : "") + "</div>" +
+      (list.length ? '<div class="heroRing">' + ring(list.length ? dn / list.length : 0, dn + " de " + list.length + " tarefas") + "<span><b>" + dn + "</b>/" + list.length + "</span></div>" : "") + "</section>";
+    if (nx) h += '<div class="row gap"><button type="button" class="btn pri" data-tm="' + nx.id + '">' + ico(TM.id === nx.id && TM.on ? "pause" : "play") + (TM.id === nx.id && TM.on ? "Pausar" : "Começar") + '</button><button type="button" class="btn" id="focusGo">' + ico("focus") + "Modo foco</button></div>";
+    h += '<section class="card"><h3 class="cardH">Tarefas de hoje</h3>' + (list.length ? list.map(x => taskRow(x)).join("") : empty("Sem tarefas hoje.")) + "</section>";
+  }
+  const od = overdue();
+  if (C.late && od.length) h += '<details class="card soft"><summary><span>Atrasadas</span><span class="badge warn">' + od.length + '</span></summary><div class="row gap wrapr"><button type="button" class="btn sm" id="odToday">Trazer tudo para hoje</button><button type="button" class="btn sm ghost" id="odSkip">Pular todas</button></div>' + od.slice(0, 12).map(x => taskRow(x, { date: 1 })).join("") + (od.length > 12 ? '<p class="muted small">E mais ' + (od.length - 12) + ".</p>" : "") + "</details>";
+  if (C.li) {
+    const w = dow(t), lid = (isLight(t) ? LI.dailyLight : LI.daily)[w], p = w === 3 ? postFor(t) : null, nextP = LI.cal.find(c => c[0] >= t);
+    h += '<section class="card"><h3 class="cardH">' + ico("li") + "LinkedIn de hoje</h3>" +
+      (lid ? "<p><b>" + esc(lid[0]) + "</b> · " + esc(lid[1]) + "</p>" : "<p>Dia livre no LinkedIn.</p>") +
+      (p ? '<p class="muted">Post de hoje: ' + esc(ideaTitle(p[2])) + "</p>" : nextP ? '<p class="muted small">Próximo post: ' + fmtD(nextP[0]) + " · " + esc(ideaTitle(nextP[2])) + "</p>" : "") +
+      '<button type="button" class="link" data-go="li">Abrir LinkedIn no app</button></section>';
+  }
+  if (C.apps && t >= START) { const mon = mondayOf(t), n = weekApps(mon), g = appsGoal(t); h += '<section class="card"><div class="row between"><h3 class="cardH">Candidaturas da semana</h3><span class="big">' + n + "<small>/" + g + '</small></span></div><div class="bar"><i style="width:' + Math.min(100, n / g * 100) + '%"></i></div><button type="button" class="btn sm" id="quickApp">' + ico("plus") + "Registrar candidatura</button></section>"; }
+  if (C.srs) { const q = srsQueue(); if (q.length) h += '<section class="card"><div class="row between"><h3 class="cardH">Flashcards para revisar</h3><span class="big">' + q.length + '</span></div><div class="row gap"><button type="button" class="btn sm" data-go="rev">Revisar</button><button type="button" class="btn sm ghost" id="audioGo">' + ico("sound") + "Ouvir</button></div></section>"; }
+  if (C.ms) { const ms = MILESTONES.filter(m => m.d >= t).slice(0, 3); if (ms.length) h += '<section class="card"><h3 class="cardH">Próximos marcos</h3><ul class="ms">' + ms.map(m => { const n = diffD(t, m.d); return "<li><span>" + esc(m.t) + '</span><span class="muted">' + (n === 0 ? "hoje" : n + (n === 1 ? " dia" : " dias")) + " · " + fmtD(m.d) + "</span></li>"; }).join("") + "</ul></section>"; }
+  h += '<p class="center"><button type="button" class="link small" data-go="config" data-cfgsec="hoje">Escolher cartões do Hoje</button></p>';
+  return h;
+}
+
+/* ---------- detalhe da tarefa ---------- */
+function openTask(id) {
+  const t = TASK[id]; if (!t) return;
+  const c = t.c ? COURSES.find(x => x.id === t.c) : null, done = isDone(id);
+  sheet('<p class="eyebrow">' + KIND[t.k] + " · " + fmtLong(t.d) + (t.h ? " · " + t.h : "") + "</p><h2>" + esc(t.t) + "</h2>" +
+    '<p class="lead">' + esc(t.desc) + "</p>" +
+    (c ? '<div class="info"><p><b>' + esc(c.n) + '</b></p><p class="muted small">' + esc(c.onde) + " · " + esc(c.how) + "</p></div>" : "") +
+    '<div class="row gap wrapr">' + (t.link ? '<a class="btn" href="' + esc(t.link) + '" target="_blank" rel="noopener">' + ico("link") + "Abrir curso</a>" : "") +
+    (t.go ? '<button type="button" class="btn" data-go="' + t.go + '">Ir para a tela</button>' : "") + (done ? "" : '<button type="button" class="btn" id="tFocus">' + ico("focus") + "Foco</button>") + "</div>" +
+    '<div class="timerBox"><span class="tmBig" id="sheetTm">' + fmtTm(TM.id === id ? tmElapsed() : (ST.tm[id] ? ST.tm[id].min * 60 : 0)) + '</span><button type="button" class="btn" data-tm="' + id + '">' + ico(TM.id === id && TM.on ? "pause" : "play") + (TM.id === id && TM.on ? "Pausar" : "Cronômetro") + "</button></div>" +
+    '<label class="fld"><span>O que aprendi</span><textarea id="diary" rows="3" placeholder="Uma ou duas frases. Vira ideia de post se você quiser.">' + esc((ST.diary[id] || {}).t || "") + "</textarea></label>" +
+    '<div class="row gap wrapr"><button type="button" class="btn sm ghost" id="toIdea">Virar ideia de post</button></div>' +
+    '<label class="fld inline"><span>Remarcar para</span><input type="date" id="mvD" value="' + t.d + '" min="' + START + '" max="' + AFTER_END + '"></label>' +
+    '<div class="sheetAct"><button type="button" class="btn pri wide" id="tDone">' + (done ? "Desmarcar" : ico("check") + "Concluir") + "</button></div>", () => {
+      const sv = () => { const v = $("#diary").value.trim(); const o = ST.diary[id] || {}; if ((o.t || "") !== v) { ST.diary[id] = { t: v, d: t.d, n: t.t, u: now() }; changed(); } };
+      $("#diary").addEventListener("change", sv);
+      $("#toIdea").onclick = () => { sv(); const v = (ST.diary[id] || {}).t; if (!v) return toast("Escreva o que aprendeu primeiro."); ST.li.ideas.push({ id: uid(), t: v, from: t.t, u: now() }); changed(); toast("Ideia salva em Carreira › LinkedIn."); };
+      $("#mvD").onchange = e => { const v = e.target.value; if (!v) return; ST.moved[id] = { d: v, u: now() }; changed(); closeSheet(); render(); toast("Remarcada para " + fmtD(v) + "."); };
+      $("#tDone").onclick = () => { sv(); setDone(id, !done); closeSheet(); };
+      if ($("#tFocus")) $("#tFocus").onclick = () => { sv(); closeSheet(); focusOpen(id); };
+    });
+}
+function setDone(id, v) {
+  if (v) { ST.done[id] = now(); delete ST.skip[id]; markAct(); if (TM.id === id) tmStop(true); }
+  else ST.done[id] = -now();
+  changed(); render();
+  if (v) { const t = TASK[id]; toast("Feito! +" + Math.max(5, Math.round(minsOf(id) / 3)) + " XP", ["Desfazer", () => setDone(id, false)]); if (t && t.k === "li" && dow(t.d) === 3) { } }
+}
+
+/* ---------- cronômetro e foco ---------- */
+const TM = { id: null, on: false, start: 0, acc: 0, t: null };
+try { const o = JSON.parse(localStorage.getItem(KEY + "-tm") || "null"); if (o && o.id) Object.assign(TM, o); } catch (e) { }
+const tmSave = () => { try { localStorage.setItem(KEY + "-tm", JSON.stringify({ id: TM.id, on: TM.on, start: TM.start, acc: TM.acc })); } catch (e) { } };
+const tmElapsed = () => Math.floor((TM.acc + (TM.on ? now() - TM.start : 0)) / 1000);
+const fmtTm = s => pad(Math.floor(s / 60)) + ":" + pad(s % 60);
+function tmToggle(id) {
+  if (TM.id && TM.id !== id) tmStop(false);
+  if (TM.id === id && TM.on) { TM.acc += now() - TM.start; TM.on = false; }
+  else { if (TM.id !== id) { TM.id = id; TM.acc = (ST.tm[id] ? ST.tm[id].min * 60000 : 0); } TM.on = true; TM.start = now(); markAct(); }
+  tmSave(); tmTick(); render(); if ($("#sheet.on")) { const b = $('#sheet [data-tm="' + id + '"]'); if (b) b.innerHTML = ico(TM.on ? "pause" : "play") + (TM.on ? "Pausar" : "Cronômetro"); }
+}
+function tmStop(keep) {
+  if (!TM.id) return;
+  const min = Math.round(tmElapsed() / 60);
+  if (min > 0) { ST.tm[TM.id] = { min, u: now() }; ST.act[todayS()] = 1; changed(); }
+  Object.assign(TM, { id: null, on: false, start: 0, acc: 0 }); tmSave(); tmTick();
+}
+function tmTick() { clearInterval(TM.t); if (TM.on) TM.t = setInterval(() => { const s = tmElapsed(); ["#sheetTm", "#fTm", "#tbTm"].forEach(q => { const e = $(q); if (e) e.textContent = fmtTm(s); }); focusRing(); const t = TASK[TM.id]; if (t && s === t.m * 60) { beep(); notify("Tempo planejado concluído", t.t); } }, 1000); }
+function timerBar() {
+  const b = $("#tbar"); if (!TM.id || !TASK[TM.id]) { b.classList.remove("on"); return; }
+  b.classList.add("on");
+  b.innerHTML = '<button type="button" class="tbT" data-open="' + TM.id + '">' + esc(TASK[TM.id].t) + '</button><span id="tbTm" class="num">' + fmtTm(tmElapsed()) + '</span><button type="button" class="ibtn" data-tm="' + TM.id + '" aria-label="' + (TM.on ? "Pausar" : "Continuar") + '">' + ico(TM.on ? "pause" : "play") + '</button><button type="button" class="ibtn" id="tbFocus" aria-label="Modo foco">' + ico("focus") + "</button>";
+}
+function beep() { try { const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 660; g.gain.value = .08; o.start(); o.stop(a.currentTime + .4); } catch (e) { } }
+/* modo foco: só a tarefa atual, o tempo e o próximo passo. Mantém a tela acesa. */
+let WL = null;
+async function wakeOn() { try { if ("wakeLock" in navigator && !WL) { WL = await navigator.wakeLock.request("screen"); WL.addEventListener("release", () => WL = null); } } catch (e) { WL = null; } }
+function wakeOff() { try { if (WL) WL.release(); } catch (e) { } WL = null; }
+function focusRing() {
+  const r = $("#fRing"); if (!r || !TM.id || !TASK[TM.id]) return;
+  const p = Math.min(1, tmElapsed() / (TASK[TM.id].m * 60)), c = 2 * Math.PI * 88;
+  r.setAttribute("stroke-dashoffset", c * (1 - p));
+  const left = $("#fLeft"); if (left) { const rest = TASK[TM.id].m * 60 - tmElapsed(); left.textContent = rest > 0 ? "faltam " + Math.ceil(rest / 60) + " min" : "tempo planejado concluído"; }
+}
+function focusOpen(id) {
+  const t = todayS();
+  id = id || TM.id || (dayTasks(t).find(x => !isDone(x.id)) || {}).id || (t < START && !$("#focus").classList.contains("on") ? (dayTasks(START).find(x => !isDone(x.id)) || {}).id : null);
+  const f = $("#focus");
+  if (!id) { if (f.classList.contains("on")) { f.innerHTML = '<button type="button" class="ibtn fX" id="fX" aria-label="Sair do modo foco">' + ico("x") + '</button><div class="fIn"><p class="fBig">✓</p><h2>Dia concluído</h2><p class="muted">Muito bem. Descanse.</p><button type="button" class="btn pri" id="fOut">Sair do foco</button></div>'; $("#fX").onclick = $("#fOut").onclick = focusClose; return; } return toast("Nenhuma tarefa aberta hoje."); }
+  const tk = TASK[id], on = TM.id === id && TM.on, el = TM.id === id ? tmElapsed() : (ST.tm[id] ? ST.tm[id].min * 60 : 0), c = 2 * Math.PI * 88;
+  const nx = dayTasks(tk.d).find(x => !isDone(x.id) && x.id !== id);
+  f.innerHTML = '<button type="button" class="ibtn fX" id="fX" aria-label="Sair do modo foco">' + ico("x") + '</button><div class="fIn"><p class="eyebrow">' + KIND[tk.k] + " · " + hm(tk.m) + "</p><h2>" + esc(tk.t) + '</h2><p class="muted fDesc">' + esc(tk.desc) + "</p>" +
+    '<div class="fClock"><svg viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="88" class="rBg"/><circle id="fRing" cx="100" cy="100" r="88" class="rFg" stroke-dasharray="' + c + '" stroke-dashoffset="' + c * (1 - Math.min(1, el / (tk.m * 60))) + '"/></svg><div><p class="fTm num" id="fTm">' + fmtTm(el) + '</p><p class="muted small" id="fLeft">' + hm(tk.m) + " planejados</p></div></div>" +
+    '<div class="row gap center"><button type="button" class="btn pri" id="fGo">' + ico(on ? "pause" : "play") + (on ? "Pausar" : "Começar") + '</button><button type="button" class="btn" id="fOk">' + ico("check") + "Concluir</button></div>" +
+    (tk.link ? '<p><a class="link" href="' + esc(tk.link) + '" target="_blank" rel="noopener">Abrir o curso</a></p>' : "") +
+    (nx ? '<p class="muted small fNext">Depois: ' + esc(nx.t) + "</p>" : "") + "</div>";
+  f.classList.add("on"); document.body.classList.add("lock"); wakeOn(); focusRing();
+  $("#fX").onclick = focusClose;
+  $("#fGo").onclick = () => { tmToggle(id); const o = TM.id === id && TM.on; $("#fGo").innerHTML = ico(o ? "pause" : "play") + (o ? "Pausar" : "Começar"); };
+  $("#fOk").onclick = () => { setDone(id, true); const n = dayTasks(tk.d).find(x => !isDone(x.id)); focusOpen(n ? n.id : null); if (n) toast("Feito! Próxima: " + n.t); };
+}
+function focusClose() { $("#focus").classList.remove("on"); document.body.classList.remove("lock"); wakeOff(); }
+
+/* ---------- AGENDA ---------- */
+let AG = { mode: "sem", ref: null, sel: null };
+function vAgenda() {
+  const t = todayS(); if (!AG.ref) AG.ref = t < START ? START : t; if (!AG.sel) AG.sel = AG.ref;
+  let h = seg("ag", [["sem", "Semana"], ["mes", "Mês"]], AG.mode);
+  if (AG.mode === "sem") {
+    const mon = mondayOf(AG.ref);
+    h += '<div class="row between nav2"><button type="button" class="ibtn" id="agPrev" aria-label="Semana anterior">' + ico("left") + "</button><b>" + fmtD(mon) + " a " + fmtD(addD(mon, 6)) + (mon >= START && mon <= END ? " · semana " + weekN(mon) : "") + '</b><button type="button" class="ibtn" id="agNext" aria-label="Próxima semana">' + ico("right") + "</button></div>";
+    const ph = phaseOf(mon); if (ph) h += '<p class="muted small center">' + esc(ph.n) + " · " + esc(ph.deliver) + "</p>";
+    h += '<p class="muted small center">Candidaturas: ' + weekApps(mon) + " de " + appsGoal(mon) + "</p>";
+    for (let i = 0; i < 7; i++) {
+      const d = addD(mon, i), L = dayTasks(d), ms = MILESTONES.filter(m => m.d === d), post = postFor(d);
+      h += '<section class="card day' + (d === t ? " today" : "") + '"><div class="row between"><h3 class="cardH">' + DOWL[dow(d)] + " · " + fmtD(d) + "</h3>" + (L.length ? '<span class="muted small">' + L.filter(x => isDone(x.id)).length + "/" + L.length + "</span>" : "") + "</div>" +
+        (OFF[d] ? '<p class="pill">Folga · ' + esc(OFF[d]) + "</p>" : "") + ms.map(m => '<p class="pill acc">Marco · ' + esc(m.t) + "</p>").join("") +
+        (post ? '<p class="pill li">Post · ' + esc(ideaTitle(post[2])) + "</p>" : "") +
+        L.map(x => taskRow(x)).join("") + "</section>";
+    }
+  } else {
+    const r = pd(AG.ref), y = r.getFullYear(), m = r.getMonth(), first = ds(new Date(y, m, 1, 12)), days = new Date(y, m + 1, 0).getDate();
+    h += '<div class="row between nav2"><button type="button" class="ibtn" id="agPrev" aria-label="Mês anterior">' + ico("left") + "</button><b>" + MONL[m] + " " + y + '</b><button type="button" class="ibtn" id="agNext" aria-label="Próximo mês">' + ico("right") + "</button></div>";
+    h += '<div class="cal"><div class="calH">' + ["S", "T", "Q", "Q", "S", "S", "D"].map(x => "<span>" + x + "</span>").join("") + '</div><div class="calG">';
+    const lead = (dow(first) + 6) % 7; for (let i = 0; i < lead; i++) h += "<span></span>";
+    for (let i = 0; i < days; i++) {
+      const d = addD(first, i), L = dayTasks(d), dn = L.filter(x => isDone(x.id)).length, ms = MILESTONES.some(x => x.d === d);
+      h += '<button type="button" class="cd' + (d === t ? " today" : "") + (d === AG.sel ? " sel" : "") + (OFF[d] ? " off" : "") + '" data-day="' + d + '"><span>' + (i + 1) + '</span><i class="dots">' + (L.length ? '<b style="width:' + Math.round(dn / L.length * 100) + '%"></b>' : "") + "</i>" + (ms ? '<em class="msd"></em>' : "") + (postFor(d) ? '<em class="lid"></em>' : "") + "</button>";
+    }
+    h += '</div></div><p class="muted small legend"><em class="msd"></em> marco <em class="lid"></em> post · a barra mostra o quanto foi feito</p>';
+    const d = AG.sel, L = dayTasks(d);
+    h += '<section class="card"><h3 class="cardH">' + esc(fmtLong(d)) + "</h3>" + (OFF[d] ? '<p class="pill">Folga · ' + esc(OFF[d]) + "</p>" : "") + MILESTONES.filter(m => m.d === d).map(m => '<p class="pill acc">Marco · ' + esc(m.t) + "</p>").join("") + (L.length ? L.map(x => taskRow(x)).join("") : empty("Nada neste dia.")) + "</section>";
+  }
+  return h;
+}
+
+/* ---------- ESTUDAR ---------- */
+function vEstudar() {
+  const s = SUB.estudar;
+  let h = seg("est", [["cursos", "Cursos"], ["rev", "Revisar"], ["sim", "Simulados"]], s);
+  if (s === "cursos") h += vCursos(); else if (s === "rev") h += vRev(); else h += vSim();
+  return h;
+}
+function vCursos() {
+  const t = todayS(); let h = "";
+  PHASES.forEach(p => {
+    const cur = t >= p.a && t <= p.b, past = t > p.b;
+    const ids = []; for (let d = p.a; d <= p.b; d = addD(d, 1)) dayTasks(d).forEach(x => { if (x.ph === p.id || (x.k === "proj" && phaseOf(x.d) === p)) ids.push(x.id); });
+    const dn = ids.filter(isDone).length;
+    const c = COURSES.find(x => x.id === p.c);
+    h += '<details class="card phase"' + (cur ? " open" : "") + '><summary><span><b>Sem. ' + p.w + " · " + esc(p.n) + '</b><small class="muted">' + fmtD(p.a) + " a " + fmtD(p.b) + (cur ? " · agora" : past ? " · passou" : "") + "</small></span>" + (ids.length ? '<span class="badge">' + dn + "/" + ids.length + "</span>" : "") + "</summary>" +
+      '<p><b>Meta:</b> ' + esc(p.goal) + "</p><p><b>Entregável:</b> " + esc(p.deliver) + "</p>" +
+      (c ? '<div class="info"><p><b>' + esc(c.n) + '</b></p><p class="muted small">' + esc(c.onde) + " · " + esc(c.how) + "</p>" + (c.link ? '<a class="link" href="' + esc(c.link) + '" target="_blank" rel="noopener">Abrir</a>' : "") + "</div>" : "") +
+      '<ol class="mods">' + p.s.map(x => "<li><b>" + esc(x[0]) + '</b> <span class="muted small">' + esc(x[1]) + "</span></li>").join("") + "</ol>" +
+      (p.sat.length ? '<p class="muted small"><b>Sábados:</b> ' + p.sat.map(esc).join(" · ") + "</p>" : "") + "</details>";
+  });
+  h += '<h3 class="secH">Todos os cursos e recursos</h3><section class="card">' + COURSES.map(c => '<div class="crs"><div><b>' + esc(c.n) + '</b><p class="muted small">' + esc(c.onde) + " · " + esc(c.how) + '</p></div><span class="pill ' + c.st + '">' + ({ manter: "Manter", concluido: "Concluído", gratis: "Grátis", depois: "Depois" }[c.st] || c.st) + "</span>" + (c.link ? '<a class="ibtn" href="' + esc(c.link) + '" target="_blank" rel="noopener" aria-label="Abrir ' + esc(c.n) + '">' + ico("link") + "</a>" : "") + "</div>").join("") + "</section>";
+  h += '<details class="card"><summary><span>Revisar por partes</span></summary>' + REVIEW_PARTS.map(r => "<p><b>" + esc(r.n) + '</b><br><span class="muted small">' + esc(r.how) + "</span></p>").join("") + "</details>";
+  h += '<details class="card"><summary><span>Pular ou descartar</span></summary>' + SKIP.map(r => "<p><b>" + esc(r[0]) + '</b> <span class="muted small">' + esc(r[1]) + "</span></p>").join("") + "</details>";
+  return h;
+}
+
+/* flashcards com revisão espaçada */
+function allCards() { return CARDS.map((c, i) => ({ id: "c" + i, deck: c[0], q: c[1], a: c[2] })).filter(c => c.deck !== "py" || todayS() >= PY_FROM).concat(ST.myCards.filter(c => !c.del)); }
+function srsQueue(deck) {
+  const t = todayS(), cards = allCards().filter(c => !deck || c.deck === deck);
+  const due = cards.filter(c => ST.srs[c.id] && ST.srs[c.id].due <= t);
+  const introduced = Object.values(ST.srs).filter(s => s.first === t).length;
+  const fresh = cards.filter(c => !ST.srs[c.id]).slice(0, Math.max(0, 10 - introduced));
+  return due.concat(fresh);
+}
+let RV = { q: null, i: 0, flip: false, deck: null };
+function vRev() {
+  if (RV.q && RV.i < RV.q.length) {
+    const c = RV.q[RV.i];
+    return '<div class="row between"><button type="button" class="link" id="rvEnd">Encerrar</button><span class="muted small">' + (RV.i + 1) + " de " + RV.q.length + '</span></div><section class="flash' + (RV.flip ? " flip" : "") + '" id="flash" role="button" tabindex="0" aria-label="Virar cartão"><p class="eyebrow">' + esc(DECKS[c.deck] || c.deck) + "</p><p class=\"fq\">" + esc(c.q) + "</p>" + (RV.flip ? '<hr><p class="fa">' + esc(c.a) + "</p>" : '<p class="muted small">Toque para ver a resposta</p>') + "</section>" +
+      (RV.flip ? '<div class="grade">' + [["0", "Errei"], ["1", "Difícil"], ["2", "Bom"], ["3", "Fácil"]].map(g => '<button type="button" class="btn g' + g[0] + '" data-g="' + g[0] + '">' + g[1] + "</button>").join("") + "</div>" : '<button type="button" class="btn pri wide" id="rvFlip">Mostrar resposta</button>');
+  }
+  RV.q = null;
+  const all = srsQueue();
+  let h = '<section class="card"><div class="row between"><div><h3 class="cardH">Para hoje</h3><p class="muted small">Revisão espaçada: o que você acerta volta mais tarde.</p></div><span class="big">' + all.length + '</span></div><div class="row gap"><button type="button" class="btn pri" data-rv=""' + (all.length ? "" : " disabled") + '>Revisar tudo</button><button type="button" class="btn" id="audioGo">' + ico("sound") + 'Ouvir</button><button type="button" class="btn ghost" id="addCard">' + ico("plus") + "Cartão</button></div></section>";
+  h += '<section class="card"><h3 class="cardH">Baralhos</h3>' + Object.keys(DECKS).map(k => { const n = allCards().filter(c => c.deck === k).length; if (!n) return ""; const q = srsQueue(k).length; return '<button type="button" class="deck" data-rv="' + k + '"><span>' + esc(DECKS[k]) + '</span><span class="muted small">' + n + " cartões</span>" + (q ? '<span class="badge">' + q + "</span>" : '<span class="badge ok">em dia</span>') + "</button>"; }).join("") + "</section>";
+  return h;
+}
+function srsGrade(g) {
+  const c = RV.q[RV.i], s = ST.srs[c.id] || { iv: 0, ef: 2.5, n: 0, first: todayS() };
+  s.n = (s.n || 0) + 1;
+  if (g === 0) { s.iv = 0; s.ef = Math.max(1.3, s.ef - .2); RV.q.push(c); if (!c.deck.startsWith("err") && !ST.myCards.some(m => m.src === c.id && !m.del)) { /* errou: guarda no baralho de erros */ ST.myCards.push({ id: "m" + uid(), deck: "err", q: c.q, a: c.a, src: c.id, u: now() }); } }
+  else { s.iv = s.iv ? Math.round(s.iv * (g === 1 ? 1.2 : g === 2 ? s.ef : s.ef * 1.3)) : (g === 1 ? 1 : g === 2 ? 2 : 4); s.ef = Math.min(3, Math.max(1.3, s.ef + (g - 2) * .1)); }
+  s.due = addD(todayS(), Math.max(g === 0 ? 0 : 1, s.iv)); s.u = now();
+  ST.srs[c.id] = s; markAct(); changed();
+  RV.i++; RV.flip = false; render();
+  if (RV.q && RV.i >= RV.q.length) { RV.q = null; toast("Revisão concluída!"); render(); }
+}
+function addCardSheet() {
+  sheet('<h2>Novo cartão</h2><label class="fld"><span>Baralho</span><select id="ncD">' + Object.keys(DECKS).map(k => '<option value="' + k + '">' + DECKS[k] + "</option>").join("") + '</select></label><label class="fld"><span>Pergunta</span><textarea id="ncQ" rows="2"></textarea></label><label class="fld"><span>Resposta</span><textarea id="ncA" rows="3"></textarea></label><div class="sheetAct"><button type="button" class="btn pri wide" id="ncOk">Salvar</button></div>', () => {
+    $("#ncOk").onclick = () => { const q = $("#ncQ").value.trim(), a = $("#ncA").value.trim(); if (!q || !a) return toast("Preencha pergunta e resposta."); ST.myCards.push({ id: "m" + uid(), deck: $("#ncD").value, q, a, u: now() }); changed(); closeSheet(); render(); toast("Cartão criado."); };
+  });
+}
+/* modo áudio */
+const AU = { on: false, list: [], i: 0, t: null };
+function audioOpen() {
+  if (!("speechSynthesis" in window)) return toast("Este navegador não lê em voz alta.");
+  AU.list = srsQueue(); if (!AU.list.length) AU.list = allCards().slice(0, 20); AU.i = 0;
+  sheet('<h2>Ouvir cartões</h2><p class="muted">Pergunta, 5 segundos para pensar, resposta. Bom para o caminho de volta.</p><p class="lead" id="auQ">' + AU.list.length + ' cartões</p><div class="row gap center"><button type="button" class="btn pri" id="auPlay">' + ico("play") + 'Tocar</button><button type="button" class="btn" id="auNext">Pular</button></div>', () => {
+    $("#auPlay").onclick = () => { AU.on = !AU.on; $("#auPlay").innerHTML = ico(AU.on ? "pause" : "play") + (AU.on ? "Pausar" : "Tocar"); if (AU.on) auSay(); else auStop(); };
+    $("#auNext").onclick = () => { auStop(); AU.i++; if (AU.on) auSay(); else auShow(); };
+  }, auStop);
+}
+function auShow() { const c = AU.list[AU.i % AU.list.length], e = $("#auQ"); if (e && c) e.textContent = (AU.i % AU.list.length + 1) + "/" + AU.list.length + " · " + c.q; }
+function auSpeak(txt, cb) { const u = new SpeechSynthesisUtterance(txt); u.lang = "pt-BR"; u.rate = 1; u.onend = cb; speechSynthesis.speak(u); }
+function auSay() { if (!AU.on) return; const c = AU.list[AU.i % AU.list.length]; auShow(); auSpeak(c.q, () => { AU.t = setTimeout(() => { if (!AU.on) return; auSpeak(c.a, () => { AU.t = setTimeout(() => { AU.i++; auSay(); }, 1500); }); }, 5000); }); }
+function auStop() { AU.on = false; clearTimeout(AU.t); try { speechSynthesis.cancel(); } catch (e) { } }
+
+/* simulados */
+let SIM = null;
+function vSim() {
+  if (SIM && SIM.kind === "quiz") {
+    if (SIM.i >= SIM.q.length) { const ok = SIM.ans.filter(Boolean).length; const h = '<section class="card center"><h2>' + ok + " de " + SIM.q.length + '</h2><p class="muted">' + (SIM.miss ? SIM.miss + " cartão(ões) novo(s) no baralho Meus erros." : "Nenhum erro. Excelente!") + '</p><button type="button" class="btn pri" id="simEnd">Voltar</button></section>'; return h; }
+    const q = QUIZ[SIM.q[SIM.i]];
+    return '<div class="row between"><button type="button" class="link" id="simEnd">Encerrar</button><span class="muted small">' + (SIM.i + 1) + " de " + SIM.q.length + '</span></div><section class="card"><p class="eyebrow">' + esc(DECKS[q[3]]) + '</p><h3>' + esc(q[0]) + '</h3><div class="opts">' + q[1].map((o, i) => '<button type="button" class="opt' + (SIM.pick != null ? (i === q[2] ? " ok" : i === SIM.pick ? " bad" : "") : "") + '" data-op="' + i + '"' + (SIM.pick != null ? " disabled" : "") + ">" + esc(o) + "</button>").join("") + "</div>" + (SIM.pick != null ? '<button type="button" class="btn pri wide" id="simNext">Próxima</button>' : "") + "</section>";
+  }
+  if (SIM && SIM.kind === "iv") {
+    const q = INTERVIEW[SIM.q[SIM.i]];
+    return '<div class="row between"><button type="button" class="link" id="simEnd">Encerrar</button><span class="muted small">' + (SIM.i + 1) + " de " + SIM.q.length + '</span></div><section class="card center"><p class="eyebrow">Responda em voz alta · até 2 min</p><h2>' + esc(q) + '</h2><p class="fTm num" id="ivTm">00:00</p><div class="row gap center"><button type="button" class="btn" id="ivClock">' + ico("play") + 'Cronômetro</button><button type="button" class="btn pri" id="ivNext">' + (SIM.i + 1 < SIM.q.length ? "Próxima" : "Terminar") + "</button></div></section>";
+  }
+  const last = ST.quiz.slice(-5).reverse();
+  return '<section class="card"><h3 class="cardH">Teste técnico</h3><p class="muted">10 questões de SQL, DAX, Excel, métricas e contabilidade. Cada erro vira um cartão.</p><button type="button" class="btn pri" id="quizGo">Começar</button>' + (last.length ? '<p class="muted small">Últimos: ' + last.map(x => x.ok + "/" + x.n + " em " + fmtD(x.d)).join(" · ") + "</p>" : "") + '</section><section class="card"><h3 class="cardH">Entrevista</h3><p class="muted">3 perguntas sorteadas para responder em voz alta. Grave no celular e assista depois.</p><button type="button" class="btn pri" id="ivGo">Começar</button></section>';
+}
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; };
+let IVT = null;
+
+/* ---------- CARREIRA ---------- */
+function vCarreira() {
+  const s = SUB.carreira;
+  let h = seg("car", [["li", "LinkedIn"], ["vagas", "Vagas"], ["ent", "Entrevista"], ["docs", "Documentos"]], s);
+  h += { li: vLI, vagas: vVagas, ent: vEnt, docs: vDocs }[s]();
+  return h;
+}
+let LIS = "sem";
+function vLI() {
+  const t = todayS();
+  let h = seg("lis", [["sem", "Semana"], ["posts", "Posts"], ["ideias", "Ideias"], ["perfil", "Perfil"]], LIS);
+  if (LIS === "sem") {
+    const mon = mondayOf(t < START ? START : t), wk = ST.li.week[mon] || {};
+    h += '<section class="card"><h3 class="cardH">Rotina fixa</h3><p class="muted small">10 min por dia útil às ' + esc(ST.cfg.times.li) + ". Post às quartas, 8h30, agendado no domingo.</p><ul class=\"plain\">" + [1, 2, 3, 4, 5, 0].map(w => { const x = (isLight(t) ? LI.dailyLight : LI.daily)[w]; return x ? "<li><b>" + DOWL[w] + ":</b> " + esc(x[1]) + "</li>" : ""; }).join("") + "</ul></section>";
+    h += '<section class="card"><h3 class="cardH">Registro da semana de ' + fmtD(mon) + '</h3><div class="grid3">' + [["posts", "Posts"], ["conn", "Conexões (total)"], ["views", "Visualizações do perfil"]].map(f => '<label class="fld"><span>' + f[1] + '</span><input type="number" min="0" inputmode="numeric" data-liw="' + f[0] + '" value="' + (wk[f[0]] != null ? wk[f[0]] : "") + '"></label>').join("") + "</div>" +
+      '<p class="muted small">Sequência de posts: <b>' + liStreak() + "</b> semana(s).</p>" + liHist() + "</section>";
+    h += '<section class="card"><h3 class="cardH">Convite (até 200 caracteres)</h3><pre class="copy">' + esc(LI.invite) + '</pre><button type="button" class="btn sm" data-copy="invite">Copiar</button><p class="muted small">Para: recrutadores de dados e finanças, analistas de BI e controladoria, pessoas da Data Hackers.</p></section>';
+  } else if (LIS === "posts") {
+    h += '<p class="muted small">Um post por quarta, ligado ao que você está estudando. Toque para ver o rascunho.</p><section class="card">' + LI.cal.map(c => { const p = ST.li.posted[c[0]], ok = p && p.ok, isI = /^i\d+$/.test(c[2]); return '<div class="post' + (ok ? " done" : "") + (c[0] === t ? " today" : "") + '"><label class="chk"><input type="checkbox" data-posted="' + c[0] + '"' + (ok ? " checked" : "") + ' aria-label="Publicado"><span></span></label><button type="button" class="tBody" data-draft="' + esc(c[2]) + '" data-pd="' + c[0] + '"><span class="tT">' + esc(ideaTitle(c[2])) + '</span><span class="tM">' + fmtD(c[0]) + " · " + esc(c[1]) + (isI && (LI.posts[c[2]] || ST.li.drafts[c[2]]) ? " · rascunho pronto" : "") + "</span></button></div>"; }).join("") + "</section>";
+  } else if (LIS === "ideias") {
+    h += '<section class="card"><h3 class="cardH">Banco de ideias</h3>' + LI.ideas.map(i => '<button type="button" class="deck" data-draft="' + i[0] + '"><span>' + esc(i[1]) + '</span><span class="muted small">' + esc(i[2]) + " · " + esc(i[3]) + "</span></button>").join("") + "</section>";
+    const mine = ST.li.ideas.filter(i => !i.del);
+    h += '<section class="card"><div class="row between"><h3 class="cardH">Suas ideias</h3><button type="button" class="btn sm" id="newIdea">' + ico("plus") + "Ideia</button></div>" + (mine.length ? mine.map(i => '<div class="crs"><div><b>' + esc(i.t) + "</b>" + (i.from ? '<p class="muted small">Do diário: ' + esc(i.from) + "</p>" : "") + '</div><button type="button" class="ibtn" data-delidea="' + i.id + '" aria-label="Apagar ideia">' + ico("x") + "</button></div>").join("") : '<p class="muted small">O que você escrever em "O que aprendi" pode virar ideia aqui.</p>') + "</section>";
+  } else {
+    h += '<section class="card"><h3 class="cardH">Título sugerido</h3><pre class="copy">' + esc(LI.headline) + '</pre><button type="button" class="btn sm" data-copy="headline">Copiar</button></section>';
+    h += '<section class="card"><h3 class="cardH">Checklist do perfil</h3>' + LI.profile.map((p, i) => '<label class="chkRow"><input type="checkbox" data-prof="' + i + '"' + (ST.li.prof[i] && ST.li.prof[i] > 0 ? " checked" : "") + "><span>" + esc(p) + "</span></label>").join("") + "</section>";
+    h += '<section class="card"><h3 class="cardH">Sobre (seu texto)</h3><textarea rows="8" data-text="liAbout" placeholder="Cole aqui o seu Sobre para ter sempre à mão.">' + esc((ST.texts.liAbout || {}).t || "") + '</textarea><button type="button" class="btn sm" data-copytext="liAbout">Copiar</button></section>';
+  }
+  return h;
+}
+function liHist() { const ks = Object.keys(ST.li.week).sort().slice(-6); if (!ks.length) return ""; return '<table class="tbl"><thead><tr><th>Semana</th><th>Posts</th><th>Conexões</th><th>Visualizações</th></tr></thead><tbody>' + ks.reverse().map(k => { const w = ST.li.week[k]; return "<tr><td>" + fmtD(k) + "</td><td>" + (w.posts ?? "–") + "</td><td>" + (w.conn ?? "–") + "</td><td>" + (w.views ?? "–") + "</td></tr>"; }).join("") + "</tbody></table>"; }
+function openDraft(ref, date) {
+  const isI = /^i\d+$/.test(ref), base = isI ? (LI.posts[ref] || "") : "", txt = (ST.li.drafts[ref] || {}).t || base;
+  sheet('<p class="eyebrow">' + (date ? "Post de " + fmtD(date) : "Rascunho") + "</p><h2>" + esc(ideaTitle(ref)) + '</h2><textarea id="drT" rows="14" placeholder="Escreva o rascunho aqui.">' + esc(txt) + '</textarea><p class="muted small">O que está entre [colchetes] você completa. Fica salvo no app.</p><div class="sheetAct row gap"><button type="button" class="btn" id="drCopy">Copiar</button>' + (date ? '<button type="button" class="btn pri" id="drPosted">' + ico("check") + "Publicado</button>" : "") + "</div>", () => {
+    const sv = () => { const v = $("#drT").value; if (v !== txt) { ST.li.drafts[ref] = { t: v, u: now() }; changed(); } };
+    $("#drT").addEventListener("change", sv);
+    $("#drCopy").onclick = () => { sv(); copyText($("#drT").value); };
+    if (date) $("#drPosted").onclick = () => { sv(); ST.li.posted[date] = { ok: 1, u: now() }; markAct(); changed(); closeSheet(); render(); toast("Post registrado! +15 XP"); };
+  });
+}
+/* vagas */
+const APP_ST = ["Enviada", "Em análise", "Teste", "Entrevista", "Proposta", "Não seguiu"];
+let VG = { f: "" };
+function vVagas() {
+  const t = todayS(), mon = mondayOf(t), list = ST.apps.filter(a => !a.del).sort((a, b) => (b.data || "").localeCompare(a.data || ""));
+  const mStart = t.slice(0, 8) + "01", month = list.filter(a => a.data >= mStart).length;
+  let h = '<section class="card"><div class="stats3"><div><b>' + weekApps(mon) + "<small>/" + appsGoal(t) + '</small></b><span>na semana</span></div><div><b>' + month + '</b><span>no mês</span></div><div><b>' + list.length + '</b><span>no total</span></div></div><button type="button" class="btn pri wide" id="quickApp">' + ico("plus") + "Registrar candidatura</button></section>";
+  const fu = list.filter(a => ["Enviada", "Em análise"].includes(a.st) && a.data && diffD(a.data, t) >= 14);
+  if (fu.length) h += '<p class="pill warn">' + fu.length + " candidatura(s) sem retorno há 14 dias ou mais: vale um follow-up.</p>";
+  h += '<div class="seg sm">' + [["", "Todas"]].concat(APP_ST.map(s => [s, s])).map(s => '<button type="button" data-vgf="' + esc(s[0]) + '" aria-selected="' + (VG.f === s[0]) + '">' + esc(s[1]) + "</button>").join("") + "</div>";
+  const L = list.filter(a => !VG.f || a.st === VG.f);
+  h += '<section class="card">' + (L.length ? L.map(a => '<button type="button" class="deck" data-app="' + a.id + '"><span><b>' + esc(a.vaga || "Vaga") + "</b> · " + esc(a.emp || "") + '</span><span class="muted small">' + (a.data ? fmtD(a.data) : "") + (a.tipo ? " · " + esc(a.tipo) : "") + '</span><span class="badge st' + APP_ST.indexOf(a.st) + '">' + esc(a.st || "Enviada") + "</span></button>").join("") : empty("Nenhuma candidatura aqui ainda.", "Registre cada vaga que você enviar. A meta da semana conta sozinha.")) + "</section>";
+  h += '<details class="card"><summary><span>Onde procurar</span></summary><p><a class="link" href="' + LINKS.ciee + '" target="_blank" rel="noopener">CIEE</a> · <a class="link" href="' + LINKS.nube + '" target="_blank" rel="noopener">Nube</a> · <a class="link" href="' + LINKS.superestagios + '" target="_blank" rel="noopener">Super Estágios</a> · LinkedIn · Gupy</p><p class="muted small">Alertas: "estágio dados", "estágio BI", "estágio controladoria", "analista de dados júnior", "assistente contábil".</p></details>';
+  return h;
+}
+function appSheet(id) {
+  const a = id ? ST.apps.find(x => x.id === id) : { data: todayS(), st: "Enviada", tipo: "Estágio" };
+  sheet("<h2>" + (id ? "Candidatura" : "Nova candidatura") + '</h2><div class="grid2"><label class="fld"><span>Empresa</span><input id="apE" value="' + esc(a.emp || "") + '"></label><label class="fld"><span>Vaga</span><input id="apV" value="' + esc(a.vaga || "") + '"></label><label class="fld"><span>Data</span><input type="date" id="apD" value="' + esc(a.data || "") + '"></label><label class="fld"><span>Tipo</span><select id="apT">' + ["Estágio", "Júnior", "Contábil", "Outro"].map(x => "<option" + (a.tipo === x ? " selected" : "") + ">" + x + "</option>").join("") + '</select></label><label class="fld"><span>Status</span><select id="apS">' + APP_ST.map(x => "<option" + (a.st === x ? " selected" : "") + ">" + x + "</option>").join("") + '</select></label><label class="fld"><span>Link</span><input id="apL" type="url" value="' + esc(a.link || "") + '"></label></div><label class="fld"><span>Retorno / anotações</span><textarea id="apR" rows="3">' + esc(a.ret || "") + '</textarea></label><div class="sheetAct row gap">' + (id ? '<button type="button" class="btn ghost" id="apDel">Apagar</button>' : "") + (a.link ? '<a class="btn" href="' + esc(a.link) + '" target="_blank" rel="noopener">Abrir vaga</a>' : "") + '<button type="button" class="btn pri" id="apOk">Salvar</button></div>', () => {
+    $("#apOk").onclick = () => {
+      const o = { emp: $("#apE").value.trim(), vaga: $("#apV").value.trim(), data: $("#apD").value, tipo: $("#apT").value, st: $("#apS").value, link: $("#apL").value.trim(), ret: $("#apR").value.trim(), u: now() };
+      if (!o.emp && !o.vaga) return toast("Preencha a empresa ou a vaga.");
+      if (id) Object.assign(a, o); else { ST.apps.push(Object.assign({ id: uid() }, o)); markAct(); }
+      changed(); closeSheet(); render(); toast(id ? "Salvo." : "Candidatura registrada! +5 XP");
+    };
+    if (id) $("#apDel").onclick = () => { a.del = 1; a.u = now(); changed(); closeSheet(); render(); toast("Apagada.", ["Desfazer", () => { delete a.del; a.u = now(); changed(); render(); }]); };
+  });
+}
+/* entrevista */
+function vEnt() {
+  let h = '<section class="card"><h3 class="cardH">Treinar agora</h3><p class="muted">3 perguntas sorteadas, em voz alta, com cronômetro.</p><button type="button" class="btn pri" id="ivGo">Começar simulado</button></section>';
+  h += '<details class="card"><summary><span>Perguntas frequentes</span><span class="badge">' + INTERVIEW.length + "</span></summary><ol class=\"mods\">" + INTERVIEW.map(q => "<li>" + esc(q) + "</li>").join("") + "</ol></details>";
+  const S = ST.stories.filter(s => !s.del);
+  h += '<section class="card"><div class="row between"><h3 class="cardH">Histórias STAR</h3><button type="button" class="btn sm" id="newStar">' + ico("plus") + 'História</button></div><p class="muted small">Situação, Tarefa, Ação e Resultado. Meta: 5 histórias prontas.</p>' + (S.length ? S.map(s => '<button type="button" class="deck" data-star="' + s.id + '"><span>' + esc(s.title || "Sem título") + '</span><span class="badge ' + (s.s && s.t && s.a && s.r ? "ok" : "") + '">' + (s.s && s.t && s.a && s.r ? "completa" : "rascunho") + "</span></button>").join("") : "") + "</section>";
+  h += '<section class="card"><h3 class="cardH">Roteiro de 3 minutos</h3><p class="muted small">Fica em Portfólio, dentro de cada projeto.</p><button type="button" class="link" data-go="port">Abrir Portfólio</button></section>';
+  return h;
+}
+function starSheet(id) {
+  const s = id ? ST.stories.find(x => x.id === id) : {};
+  sheet('<h2>História STAR</h2><label class="fld"><span>Título</span><input id="stN" value="' + esc(s.title || "") + '" placeholder="Ex.: Limpeza da base do Projeto 1"></label>' + ["s", "t", "a", "r"].map(k => '<label class="fld"><span>' + esc(STAR_TPL[k]) + '</span><textarea id="st' + k + '" rows="2">' + esc(s[k] || "") + "</textarea></label>").join("") + '<div class="sheetAct row gap">' + (id ? '<button type="button" class="btn ghost" id="stDel">Apagar</button>' : "") + '<button type="button" class="btn pri" id="stOk">Salvar</button></div>', () => {
+    $("#stOk").onclick = () => { const o = { title: $("#stN").value.trim(), s: $("#sts").value.trim(), t: $("#stt").value.trim(), a: $("#sta").value.trim(), r: $("#str").value.trim(), u: now() }; if (id) Object.assign(s, o); else ST.stories.push(Object.assign({ id: uid() }, o)); changed(); closeSheet(); render(); toast("História salva."); };
+    if (id) $("#stDel").onclick = () => { s.del = 1; s.u = now(); changed(); closeSheet(); render(); };
+  });
+}
+/* documentos */
+function vDocs() {
+  const t = todayS();
+  let h = '<section class="card"><h3 class="cardH">Currículo</h3><p class="muted small">Duas versões: dados e contabilidade. Os textos sugeridos chegam numa próxima versão, depois da sua aprovação. Enquanto isso, guarde aqui o seu texto atual.</p>' + seg("cv", [["cvDados", "Dados"], ["cvCont", "Contabilidade"]], CV) + '<textarea rows="10" data-text="' + CV + '" placeholder="Cole aqui o texto do currículo (' + (CV === "cvDados" ? "versão dados" : "versão contábil") + '). Sem CPF, endereço ou telefone.">' + esc((ST.texts[CV] || {}).t || "") + '</textarea><button type="button" class="btn sm" data-copytext="' + CV + '">Copiar</button></section>';
+  const C = ST.contacts.filter(c => !c.del), due = C.filter(c => c.data && diffD(c.data, t) >= 30 && !c.ok);
+  h += '<section class="card"><div class="row between"><h3 class="cardH">Contatos</h3><button type="button" class="btn sm" id="newCt">' + ico("plus") + "Contato</button></div>" + (due.length ? '<p class="pill warn">' + due.length + " contato(s) para retomar (30 dias ou mais).</p>" : "") + (C.length ? C.map(c => '<div class="crs"><div><b>' + esc(c.nome) + '</b><p class="muted small">' + esc(c.onde || "") + (c.data ? " · " + fmtD(c.data) : "") + (c.nota ? " · " + esc(c.nota) : "") + '</p></div><button type="button" class="ibtn" data-ctok="' + c.id + '" aria-label="Retomado hoje">' + ico("check") + '</button><button type="button" class="ibtn" data-ctdel="' + c.id + '" aria-label="Apagar contato">' + ico("x") + "</button></div>").join("") : '<p class="muted small">Recrutadores e pessoas com quem você conversou. O app lembra de retomar depois de 30 dias.</p>') + "</section>";
+  const Ce = ST.certs.filter(c => !c.del);
+  h += '<section class="card"><div class="row between"><h3 class="cardH">Certificados</h3><button type="button" class="btn sm" id="newCert">' + ico("plus") + "Certificado</button></div>" + (Ce.length ? Ce.map(c => '<div class="crs"><div><b>' + esc(c.nome) + '</b><p class="muted small">' + (c.data ? fmtD(c.data) : "") + "</p></div>" + (c.link ? '<a class="ibtn" href="' + esc(c.link) + '" target="_blank" rel="noopener" aria-label="Abrir certificado">' + ico("link") + "</a>" : "") + '<button type="button" class="ibtn" data-certdel="' + c.id + '" aria-label="Apagar certificado">' + ico("x") + "</button></div>").join("") : '<p class="muted small">Cursos concluídos e, depois, a PL-300.</p>') + "</section>";
+  return h;
+}
+let CV = "cvDados";
+function miniForm(title, fields, onOk) {
+  sheet("<h2>" + esc(title) + "</h2>" + fields.map(f => '<label class="fld"><span>' + esc(f[1]) + '</span><input id="mf' + f[0] + '" type="' + (f[2] || "text") + '" value="' + esc(f[3] || "") + '"></label>').join("") + '<div class="sheetAct"><button type="button" class="btn pri wide" id="mfOk">Salvar</button></div>', () => {
+    $("#mfOk").onclick = () => { const o = {}; fields.forEach(f => o[f[0]] = $("#mf" + f[0]).value.trim()); if (!o[fields[0][0]]) return toast("Preencha " + fields[0][1].toLowerCase() + "."); onOk(o); changed(); closeSheet(); render(); };
+  });
+}
+
+/* ---------- PORTFÓLIO ---------- */
+let PJ = "p1";
+const KB = [["todo", "A fazer"], ["doing", "Fazendo"], ["done", "Feito"]];
+function vPort() {
+  const p = PROJECTS.find(x => x.id === PJ);
+  let h = seg("pj", PROJECTS.map(x => [x.id, x.n.split(" · ")[0]]), PJ);
+  const dn = p.steps.filter((_, i) => ST.steps[p.id + ":" + i]).length;
+  h += '<section class="card"><p class="eyebrow">' + esc(p.status) + " · dados: " + esc(p.src) + "</p><h2>" + esc(p.n.split(" · ")[1] || p.n) + '</h2><div class="bar"><i style="width:' + Math.round(dn / p.steps.length * 100) + '%"></i></div><p class="muted small">' + dn + " de " + p.steps.length + ' etapas</p><p><b>Pronto quando:</b> ' + esc(p.done) + "</p></section>";
+  h += '<section class="card"><h3 class="cardH">Etapas</h3>' + p.steps.map((s, i) => '<label class="chkRow"><input type="checkbox" data-step="' + p.id + ":" + i + '"' + (ST.steps[p.id + ":" + i] ? " checked" : "") + "><span>" + esc(s) + "</span></label>").join("") + "</section>";
+  const K = (ST.kanban[p.id] || []).filter(c => !c.del);
+  h += '<section class="card"><div class="row between"><h3 class="cardH">Quadro</h3><button type="button" class="btn sm" id="kbNew">' + ico("plus") + 'Cartão</button></div><div class="kb">' + KB.map(col => '<div class="kbCol"><p class="kbH">' + col[1] + " <span>" + K.filter(c => c.col === col[0]).length + "</span></p>" + K.filter(c => c.col === col[0]).map(c => '<div class="kbC"><span>' + esc(c.t) + '</span><div class="kbA">' + (col[0] !== "todo" ? '<button type="button" class="ibtn sm" data-kbm="' + c.id + ':-1" aria-label="Mover para a esquerda">' + ico("left") + "</button>" : "") + (col[0] !== "done" ? '<button type="button" class="ibtn sm" data-kbm="' + c.id + ':1" aria-label="Mover para a direita">' + ico("right") + "</button>" : "") + '<button type="button" class="ibtn sm" data-kbd="' + c.id + '" aria-label="Apagar cartão">' + ico("x") + "</button></div></div>").join("") + "</div>").join("") + "</div></section>";
+  h += '<details class="card"><summary><span>README</span></summary><textarea rows="12" data-text="readme-' + p.id + '">' + esc((ST.texts["readme-" + p.id] || {}).t || README_TPL) + '</textarea><button type="button" class="btn sm" data-copytext="readme-' + p.id + '">Copiar</button></details>';
+  h += '<details class="card"><summary><span>Roteiro de 3 minutos</span></summary><textarea rows="8" data-text="pitch-' + p.id + '">' + esc((ST.texts["pitch-" + p.id] || {}).t || PITCH_TPL) + '</textarea><div class="row gap"><button type="button" class="btn sm" data-copytext="pitch-' + p.id + '">Copiar</button><button type="button" class="btn sm" id="pitchTm">' + ico("play") + 'Treinar com cronômetro</button></div><p class="fTm num sm" id="ptTm" hidden>00:00</p></details>';
+  return h;
+}
+
+/* ---------- PROGRESSO ---------- */
+function vProg() {
+  const s = stats(), st = streak(), t = todayS(), mon = mondayOf(t);
+  let wkDone = 0, wkAll = 0; for (let i = 0; i < 7; i++) dayTasks(addD(mon, i)).forEach(x => { wkAll++; if (isDone(x.id)) wkDone++; });
+  let h = '<section class="card lvl"><div><p class="eyebrow">Nível ' + s.lvl + "</p><h2>" + s.xp + ' XP</h2><div class="bar"><i style="width:' + s.pct + '%"></i></div><p class="muted small">Faltam ' + s.toNext + " XP para o nível " + (s.lvl + 1) + "</p></div></section>";
+  h += '<section class="card"><div class="stats3"><div><b>' + st + "</b><span>dias seguidos</span></div><div><b>" + hm(s.mins).replace(" min", "min") + "</b><span>estudadas</span></div><div><b>" + liStreak() + '</b><span>semanas postando</span></div></div><div class="stats3"><div><b>' + wkDone + "<small>/" + wkAll + "</small></b><span>tarefas na semana</span></div><div><b>" + s.reviews + "</b><span>revisões</span></div><div><b>" + s.apps + "</b><span>candidaturas</span></div></div></section>";
+  h += '<section class="card"><h3 class="cardH">Medalhas</h3><div class="medals">' + medals().map(m => '<div class="medal' + (m.ok ? " ok" : "") + '" title="' + esc(m.d) + '"><span>' + (m.ok ? "★" : "☆") + "</span><b>" + esc(m.n) + "</b><small>" + esc(m.d) + "</small></div>").join("") + "</div></section>";
+  h += '<section class="card"><h3 class="cardH">Últimas 8 semanas</h3>' + weeksChart() + "</section>";
+  h += '<section class="card"><h3 class="cardH">Revisão do mês</h3>' + monthReview() + (IN_CLAUDE ? "" : '<button type="button" class="btn sm" id="printRep">Relatório para imprimir (PDF)</button>') + "</section>";
+  h += '<p class="center"><button type="button" class="link" data-go="rota">Ver rota de níveis e competências</button></p>';
+  return h;
+}
+function weeksChart() {
+  const t = todayS(), mon = mondayOf(t < START ? START : t), rows = [];
+  for (let k = 7; k >= 0; k--) { const m = addD(mon, -7 * k); if (addD(m, 6) < START) continue; let a = 0, d = 0; for (let i = 0; i < 7; i++) dayTasks(addD(m, i)).forEach(x => { if (MATTERS(x)) { a++; if (isDone(x.id)) d++; } }); rows.push([m, a ? d / a : 0, d, a]); }
+  if (!rows.length) return '<p class="muted small">Aparece quando o plano começar.</p>';
+  return '<div class="wchart">' + rows.map(r => '<div class="wc"><i style="height:' + Math.max(4, Math.round(r[1] * 100)) + '%" title="' + r[2] + " de " + r[3] + '"></i><span>' + fmtD(r[0]) + "</span></div>").join("") + '</div><p class="muted small">% das tarefas principais feitas em cada semana.</p>';
+}
+function monthReview() {
+  const t = todayS(), m0 = t.slice(0, 8) + "01"; let a = 0, d = 0, mins = 0;
+  for (const day in SCHED) if (day >= m0 && day <= t) SCHED[day].forEach(x => { if (MATTERS(x)) { a++; if (isDone(x.id)) { d++; mins += minsOf(x.id); } } });
+  const apps = ST.apps.filter(x => !x.del && x.data >= m0).length, posts = Object.keys(ST.li.posted).filter(k => k >= m0 && ST.li.posted[k].ok).length;
+  return '<ul class="plain"><li>Tarefas principais: <b>' + d + " de " + a + "</b></li><li>Tempo nessas tarefas: <b>" + hm(mins) + "</b></li><li>Candidaturas: <b>" + apps + "</b></li><li>Posts: <b>" + posts + "</b></li></ul>";
+}
+function printReport() {
+  const s = stats(), t = todayS();
+  const w = $("#print");
+  w.innerHTML = "<h1>Relatório de progresso · " + fmtD(t) + "</h1><p>Nível " + s.lvl + " · " + s.xp + " XP · " + streak() + " dias seguidos · " + hm(s.mins) + " estudadas</p><h2>Este mês</h2>" + monthReview() + "<h2>Competências</h2><table class=\"tbl\"><thead><tr><th>Competência</th><th>Hoje</th><th>Meta júnior</th><th>Meta pleno</th></tr></thead><tbody>" + SKILLS.map(k => "<tr><td>" + esc(k.n) + "</td><td>" + skillNow(k) + "</td><td>" + k.t[1] + "</td><td>" + k.t[2] + "</td></tr>").join("") + "</tbody></table><h2>Medalhas</h2><p>" + medals().filter(m => m.ok).map(m => esc(m.n)).join(" · ") + "</p>";
+  window.print();
+}
+
+/* ---------- ROTA E COMPETÊNCIAS ---------- */
+function skillNow(k) { const ms = Object.keys(ST.skills).sort(); for (let i = ms.length - 1; i >= 0; i--) { const v = ST.skills[ms[i]][k.id]; if (v) return v; } return k.now; }
+function curLevel() { const h = ST.cfg.hired; if (!h) return 0; return h.lvl === "jr" ? 1 : 0; }
+function vRota() {
+  const hired = ST.cfg.hired, L = curLevel(), next = Math.min(L + 1, 4);
+  let h = '<section class="card"><p class="eyebrow">Meta</p><h2>Especialista em BI Financeiro</h2><p class="muted">Trilha técnica, sem rota de gestão.</p>' + (hired ? '<p class="pill acc">Contratada em ' + fmtD(hired.d) + " como " + (hired.lvl === "jr" ? "júnior" : "estagiária") + "</p>" : '<button type="button" class="btn sm" id="hiredGo">Registrar contratação</button>') + "</section>";
+  h += '<ol class="route">' + LEVELS.map((l, i) => { let when = l.when; if (i === 2 && hired) when = hired.lvl === "jr" ? "fim de 2028" : "2029"; if (i >= 3 && hired && hired.lvl !== "jr") when = String(Number(l.when) + 1); return '<li class="' + (i < L ? "past" : i === L ? "cur" : "") + '"><div class="rDot"></div><div><p class="eyebrow">' + esc(when) + "</p><h3>" + esc(l.n) + '</h3><p class="muted small">' + esc(l.roles) + "</p><p>" + esc(l.req) + '</p><p class="small"><b>Sinal de que chegou:</b> ' + esc(l.sign) + "</p>" + (i === 2 ? '<details><summary class="small">Condições para pleno no fim de 2028</summary><ul class="plain small">' + PLENO_CONDITIONS.map(c => "<li>" + esc(c) + "</li>").join("") + "</ul></details>" : "") + "</div></li>"; }).join("") + "</ol>";
+  const mk = monthKey();
+  h += '<section class="card"><div class="row between"><h3 class="cardH">Competências</h3><span class="muted small">meta: ' + esc(LEVELS[L].n) + "</span></div><p class=\"muted small\">Dê nota de 1 a 5 uma vez por mês. 1 = nunca usei · 3 = faço sozinha · 5 = referência.</p>" +
+    SKILLS.map(k => { const v = skillNow(k), tg = k.t[L], tn = k.t[next]; return '<div class="sk"><div class="skN"><b>' + esc(k.n) + '</b><span class="muted small">meta ' + tg + (next !== L ? " · depois " + tn : "") + '</span></div><div class="skB">' + [1, 2, 3, 4, 5].map(n => '<button type="button" class="dotb' + (n <= v ? " on" : "") + (n === tg ? " tg" : "") + '" data-sk="' + k.id + ":" + n + '" aria-label="' + esc(k.n) + " nota " + n + '"' + (n === v ? ' aria-pressed="true"' : "") + "></button>").join("") + "</div></div>"; }).join("") +
+    '<p class="muted small">O contorno marca a meta do nível atual. Notas salvas em ' + MONL[Number(mk.slice(5)) - 1] + ".</p>" + skillHist() + "</section>";
+  return h;
+}
+const monthKey = () => todayS().slice(0, 7);
+function skillHist() { const ms = Object.keys(ST.skills).sort(); if (ms.length < 2) return ""; const a = ST.skills[ms[0]], b = ST.skills[ms[ms.length - 1]]; const up = SKILLS.filter(k => (b[k.id] || k.now) > (a[k.id] || k.now)).map(k => k.n); return up.length ? '<p class="small">Subiu desde ' + ms[0].slice(5) + "/" + ms[0].slice(0, 4) + ": <b>" + up.map(esc).join(", ") + "</b></p>" : ""; }
+
+/* ---------- CONFIGURAÇÕES ---------- */
+function vConfig() {
+  const c = ST.cfg;
+  const grp = (id, t, body) => '<details class="card" id="cfg-' + id + '"' + (CFGOPEN === id ? " open" : "") + "><summary><span>" + t + "</span></summary>" + body + "</details>";
+  let h = grp("rotina", "Rotina", '<p class="muted small">Os horários organizam a ordem das tarefas e os lembretes.</p><div class="grid2">' + [["flash", "Flashcards (caminho)"], ["li", "LinkedIn"], ["study", "Estudo"], ["sat", "Sábado (projeto)"]].map(f => '<label class="fld"><span>' + f[1] + '</span><input type="time" data-time="' + f[0] + '" value="' + esc(c.times[f[0]]) + '"></label>').join("") + "</div>" +
+    '<h4>Contratação</h4>' + (c.hired ? '<p>Contratada em ' + fmtD(c.hired.d) + " como " + (c.hired.lvl === "jr" ? "júnior" : "estagiária") + '. <button type="button" class="link" id="hiredClear">Desfazer</button></p>' : '<button type="button" class="btn sm" id="hiredGo">Registrar contratação</button>'));
+  h += grp("hoje", "Cartões do Hoje", [["late", "Atrasadas"], ["li", "LinkedIn de hoje"], ["apps", "Candidaturas da semana"], ["srs", "Flashcards para revisar"], ["ms", "Próximos marcos"]].map(x => '<label class="chkRow"><input type="checkbox" id="cHc-' + x[0] + '" data-card="' + x[0] + '"' + (c.cards[x[0]] ? " checked" : "") + "><span>" + x[1] + "</span></label>").join(""));
+  h += grp("apar", "Aparência", '<div class="seg">' + [["auto", "Automático"], ["light", "Claro"], ["dark", "Escuro"]].map(x => '<button type="button" data-theme="' + x[0] + '" aria-selected="' + (c.theme === x[0]) + '">' + x[1] + "</button>").join("") + "</div>");
+  const np = "Notification" in window ? Notification.permission : "unsupported";
+  h += grp("avisos", "Avisos", '<p class="muted small">Lembretes do post de quarta, resumo da semana no domingo à noite e lembretes das tarefas nos horários da rotina. Funcionam com o app aberto ou em segundo plano no celular.</p>' + (np === "unsupported" ? '<p class="muted">Este navegador não mostra notificações.</p>' : '<label class="chkRow"><input type="checkbox" id="notifOn"' + (c.notif && np === "granted" ? " checked" : "") + "><span>Receber avisos</span></label>" + (np === "denied" ? '<p class="pill warn">As notificações estão bloqueadas no navegador. Libere nas permissões do site.</p>' : "")));
+  h += grp("sync", "Sincronização", syncPanel());
+  h += grp("dados", "Dados", '<p class="muted small">Seu progresso fica neste aparelho e, se você ligar a sincronização, também na sua nuvem.</p><div class="row gap wrapr">' + (IN_CLAUDE ? "" : '<button type="button" class="btn sm" id="expB">Exportar backup</button>') + '<label class="btn sm">Importar backup<input type="file" id="impB" accept="application/json" hidden></label></div><p class="muted small">Versão ' + APP_V + " · " + esc(NEWS[APP_V]) + '</p><button type="button" class="btn sm ghost danger" id="resetAll">Apagar tudo deste aparelho</button>');
+  return h;
+}
+let CFGOPEN = "";
+function setTheme() { const t = ST.cfg.theme; if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t); const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", getComputedStyle(document.body).getPropertyValue("--bg").trim() || "#f6f7f5"); }
+
+/* ---------- avisos ---------- */
+async function notify(title, body) {
+  if (!ST.cfg.notif || !("Notification" in window) || Notification.permission !== "granted") return;
+  try { const r = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (r) r.showNotification(title, { body, icon: "icons/icon-192.png", tag: title }); else new Notification(title, { body }); } catch (e) { }
+}
+let NT = null;
+function schedNotifs() {
+  clearInterval(NT); if (!ST.cfg.notif) return;
+  const tick = () => {
+    const d = new Date(), t = todayS(), hhmm = pad(d.getHours()) + ":" + pad(d.getMinutes()), sent = JSON.parse(localStorage.getItem(KEY + "-nt") || "{}");
+    const once = (k, ti, b) => { if (sent[k]) return; sent[k] = 1; localStorage.setItem(KEY + "-nt", JSON.stringify(sent)); notify(ti, b); };
+    const w = d.getDay();
+    if (w === 2 && hhmm >= "19:00") { const p = postFor(addD(t, 1)); if (p && !(ST.li.posted[addD(t, 1)] || {}).ok) once("post" + t, "Post de amanhã", "Ele já está agendado? " + ideaTitle(p[2])); }
+    if (w === 0 && hhmm >= "20:00") { const mon = mondayOf(t); let a = 0, dn = 0; for (let i = 0; i < 7; i++) dayTasks(addD(mon, i)).forEach(x => { if (MATTERS(x)) { a++; if (isDone(x.id)) dn++; } }); once("sum" + t, "Resumo da semana", dn + " de " + a + " tarefas principais · " + weekApps(mon) + " candidaturas"); }
+    dayTasks(t).forEach(x => { if (!isDone(x.id) && x.h && hhmm >= x.h && hhmm < addT(x.h, 10)) once("t" + x.id, "Hora de: " + x.t, hm(x.m)); });
+  };
+  tick(); NT = setInterval(tick, 60000);
+}
+
+/* ---------- sincronização (Supabase próprio dela) ---------- */
+const CL = { code: null, base: 0, st: "off", t: null, busy: false, err: "" };
+try { const o = JSON.parse(localStorage.getItem(KEY + "-cloud") || "{}"); CL.code = o.code || null; CL.base = o.base || 0; if (CL.code) CL.st = "idle"; } catch (e) { }
+const clStore = () => { try { localStorage.setItem(KEY + "-cloud", JSON.stringify({ code: CL.code, base: CL.base })); } catch (e) { } };
+const codeOk = c => /^pc-[a-z0-9]{4}(-[a-z0-9]{4}){5}$/.test(c || "");
+function newCode() { const a = "abcdefghjkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(24)); let s = ""; r.forEach((x, i) => { if (i && i % 4 === 0) s += "-"; s += a[x % a.length]; }); return "pc-" + s; }
+async function rpc(fn, args) {
+  const r = await fetch(SB_URL + "/rest/v1/rpc/" + fn, { method: "POST", headers: { apikey: SB_KEY, "Content-Type": "application/json" }, body: JSON.stringify(args) });
+  if (!r.ok) throw new Error("http " + r.status);
+  const t = await r.text(); return t ? JSON.parse(t) : null;
+}
+function mergeVal(a, b, bNewer) {
+  if (a === undefined) return b; if (b === undefined) return a;
+  if (typeof a === "number" && typeof b === "number") return Math.abs(b) > Math.abs(a) ? b : a;
+  if (Array.isArray(a) && Array.isArray(b)) { const m = {}; a.concat(b).forEach(x => { if (!x || !x.id) return; const o = m[x.id]; if (!o || (x.u || 0) > (o.u || 0)) m[x.id] = x; }); return Object.values(m); }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    if ("u" in a || "u" in b) return (b.u || 0) > (a.u || 0) ? b : a;
+    const o = {}; new Set(Object.keys(a).concat(Object.keys(b))).forEach(k => o[k] = mergeVal(a[k], b[k], bNewer)); return o;
+  }
+  return bNewer ? b : a;
+}
+function mergeST(loc, rem) { const bNewer = (rem.upd || 0) > (loc.upd || 0); const o = {}; new Set(Object.keys(loc).concat(Object.keys(rem))).forEach(k => { if (k === "cfg") o.cfg = bNewer ? Object.assign({}, loc.cfg, rem.cfg) : Object.assign({}, rem.cfg, loc.cfg); else o[k] = mergeVal(loc[k], rem[k], bNewer); }); o.upd = Math.max(loc.upd || 0, rem.upd || 0); return o; }
+async function syncNow() {
+  if (!CL.code || CL.busy || IN_CLAUDE) return;
+  CL.busy = true; CL.st = "busy"; syncDot();
+  try {
+    for (let tries = 0; tries < 3; tries++) {
+      const ver = await rpc("pc_ver", { p_code: CL.code });
+      if (ver && ver !== CL.base) { const r = await rpc("pc_get", { p_code: CL.code }); if (r && r.s) { ST = mergeST(ST, r.s); saveLocal(); ST = load(); setTheme(); } CL.base = ver; }
+      const res = await rpc("pc_save", { p_code: CL.code, p_s: ST, p_upd: ST.upd || now(), p_base: CL.base });
+      if (res && res.ok) { CL.base = res.ver; CL.st = "ok"; CL.err = ""; CL.at = now(); break; }
+      CL.base = res ? res.ver : CL.base;
+    }
+  } catch (e) { CL.st = "err"; CL.err = navigator.onLine === false ? "Sem internet. O progresso fica no aparelho e sobe depois." : "Não foi possível falar com a nuvem agora."; }
+  CL.busy = false; clStore(); syncDot();
+}
+function syncKick() { if (!CL.code) return; clearTimeout(CL.t); CL.t = setTimeout(syncNow, 2500); }
+function syncDot() { const d = $("#sync"); if (!d) return; d.className = "sdot " + (CL.code ? CL.st : "off"); d.title = !CL.code ? "Sincronização desligada" : CL.st === "ok" ? "Sincronizado" : CL.st === "err" ? CL.err : CL.st === "busy" ? "Sincronizando…" : "Sincronização ligada"; }
+function syncPanel() {
+  if (IN_CLAUDE) return '<p class="muted small">A sincronização funciona no app instalado (GitHub Pages). Aqui o progresso fica só nesta página.</p>';
+  if (!CL.code) return '<p class="muted small">Use o mesmo código no celular e no computador para manter tudo igual. Não precisa de senha. Guarde o código: quem tiver ele vê o seu progresso.</p><div class="row gap wrapr"><button type="button" class="btn sm pri" id="syNew">Criar meu código</button></div><label class="fld"><span>Já tenho um código</span><input id="syIn" placeholder="pc-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx" autocomplete="off" autocapitalize="none" spellcheck="false"></label><button type="button" class="btn sm" id="syUse">Usar este código</button>';
+  return '<p>Código: <code class="code">' + esc(CL.code) + '</code></p><div class="row gap wrapr"><button type="button" class="btn sm" id="syCopy">Copiar código</button><button type="button" class="btn sm" id="syGo">Sincronizar agora</button><button type="button" class="btn sm ghost" id="syOff">Desligar neste aparelho</button></div><p class="muted small">' + (CL.st === "err" ? esc(CL.err) : CL.at ? "Última sincronização: " + new Date(CL.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "Ligada.") + "</p>";
+}
+
+/* ---------- sheet (painel de baixo) ---------- */
+let SHEET_CLOSE = null;
+function sheet(html, wireFn, onClose) {
+  const s = $("#sheet");
+  s.innerHTML = '<div class="sheetIn" role="dialog" aria-modal="true"><button type="button" class="ibtn sX" id="sheetX" aria-label="Fechar">' + ico("x") + "</button>" + html + "</div>";
+  s.classList.add("on"); $("#scrim").classList.add("on"); document.body.classList.add("lock");
+  SHEET_CLOSE = onClose || null;
+  $("#sheetX").onclick = closeSheet;
+  s.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { closeSheet(); go(b.dataset.go); }));
+  s.querySelectorAll("[data-tm]").forEach(b => b.addEventListener("click", () => tmToggle(b.dataset.tm)));
+  if (wireFn) wireFn();
+  const f = s.querySelector("textarea,input,button.btn"); if (f && f.tagName === "BUTTON") f.focus({ preventScroll: true });
+}
+function closeSheet() { const s = $("#sheet"); if (!s.classList.contains("on")) return; s.classList.remove("on"); if (!$("#drawer").classList.contains("on")) $("#scrim").classList.remove("on"); document.body.classList.remove("lock"); if (SHEET_CLOSE) { SHEET_CLOSE(); SHEET_CLOSE = null; } }
+
+/* ---------- eventos ---------- */
+function on(id, fn) { const e = document.getElementById(id); if (e) e.onclick = fn; }
+function wire() {
+  const V = $("#view");
+  V.querySelectorAll("[data-chk]").forEach(c => c.onchange = () => setDone(c.dataset.chk, c.checked));
+  V.querySelectorAll("[data-open]").forEach(b => b.onclick = () => openTask(b.dataset.open));
+  V.querySelectorAll("[data-tm]").forEach(b => b.onclick = () => tmToggle(b.dataset.tm));
+  V.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { if (b.dataset.cfgsec) CFGOPEN = b.dataset.cfgsec; go(b.dataset.go); });
+  V.querySelectorAll("[data-seg]").forEach(b => b.onclick = () => {
+    const n = b.dataset.seg, s = b.dataset.s;
+    if (n === "est") { SUB.estudar = s; RV.q = null; SIM = null; } else if (n === "car") SUB.carreira = s; else if (n === "ag") AG.mode = s; else if (n === "lis") LIS = s; else if (n === "pj") PJ = s; else if (n === "cv") CV = s;
+    if (n === "est" || n === "car") go(VIEW, s); else render();
+  });
+  on("focusGo", () => focusOpen());
+  on("odToday", () => { const t = todayS(); overdue().forEach(x => ST.moved[x.id] = { d: t, u: now() }); changed(); render(); toast("Trazidas para hoje."); });
+  on("odSkip", () => { const ids = overdue().map(x => x.id); ids.forEach(id => ST.skip[id] = now()); changed(); render(); toast(ids.length + " puladas.", ["Desfazer", () => { ids.forEach(id => delete ST.skip[id]); changed(); render(); }]); });
+  on("quickApp", () => appSheet(null));
+  on("audioGo", audioOpen);
+  /* agenda */
+  on("agPrev", () => { AG.ref = AG.mode === "sem" ? addD(AG.ref, -7) : ds(new Date(pd(AG.ref).getFullYear(), pd(AG.ref).getMonth() - 1, 1, 12)); AG.sel = AG.ref; render(); });
+  on("agNext", () => { AG.ref = AG.mode === "sem" ? addD(AG.ref, 7) : ds(new Date(pd(AG.ref).getFullYear(), pd(AG.ref).getMonth() + 1, 1, 12)); AG.sel = AG.ref; render(); });
+  V.querySelectorAll("[data-day]").forEach(b => b.onclick = () => { AG.sel = b.dataset.day; render(); });
+  /* revisar */
+  V.querySelectorAll("[data-rv]").forEach(b => b.onclick = () => { const q = srsQueue(b.dataset.rv || null); if (!q.length) { const all = allCards().filter(c => c.deck === b.dataset.rv); if (!all.length) return; RV.q = shuffle(all).slice(0, 10); } else RV.q = q; RV.i = 0; RV.flip = false; render(); });
+  const fl = $("#flash"); if (fl) { const f = () => { if (!RV.flip) { RV.flip = true; render(); } }; fl.onclick = f; fl.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); f(); } }; }
+  on("rvFlip", () => { RV.flip = true; render(); });
+  on("rvEnd", () => { RV.q = null; render(); });
+  V.querySelectorAll("[data-g]").forEach(b => b.onclick = () => srsGrade(Number(b.dataset.g)));
+  on("addCard", addCardSheet);
+  /* simulados */
+  on("quizGo", () => { SIM = { kind: "quiz", q: shuffle(QUIZ.map((_, i) => i)).slice(0, 10), i: 0, ans: [], pick: null, miss: 0 }; render(); });
+  on("ivGo", () => { SUB.estudar = "sim"; SIM = { kind: "iv", q: shuffle(INTERVIEW.map((_, i) => i)).slice(0, 3), i: 0 }; if (VIEW !== "estudar") go("estudar", "sim"); else render(); });
+  on("simEnd", () => { if (SIM && SIM.kind === "quiz" && SIM.i >= SIM.q.length) { } SIM = null; clearInterval(IVT); render(); });
+  V.querySelectorAll("[data-op]").forEach(b => b.onclick = () => {
+    const i = Number(b.dataset.op), q = QUIZ[SIM.q[SIM.i]]; SIM.pick = i; const ok = i === q[2]; SIM.ans.push(ok);
+    if (!ok) { const qq = q[0]; if (!ST.myCards.some(m => m.q === qq && !m.del)) { ST.myCards.push({ id: "m" + uid(), deck: "err", q: qq, a: q[1][q[2]], u: now() }); SIM.miss++; } }
+    render();
+  });
+  on("simNext", () => { SIM.i++; SIM.pick = null; if (SIM.i >= SIM.q.length) { ST.quiz.push({ id: uid(), d: todayS(), ok: SIM.ans.filter(Boolean).length, n: SIM.q.length, u: now() }); markAct(); changed(); } render(); });
+  on("ivClock", () => { clearInterval(IVT); const s0 = now(); IVT = setInterval(() => { const e = $("#ivTm"); if (!e) return clearInterval(IVT); const s = Math.floor((now() - s0) / 1000); e.textContent = fmtTm(s); if (s === 120) beep(); }, 500); });
+  on("ivNext", () => { clearInterval(IVT); SIM.i++; if (SIM.i >= SIM.q.length) { SIM = null; markAct(); changed(); toast("Simulado feito. Assista a gravação!"); } render(); });
+  /* linkedin */
+  V.querySelectorAll("[data-liw]").forEach(i => i.onchange = () => { const mon = mondayOf(todayS() < START ? START : todayS()); const w = Object.assign({}, ST.li.week[mon] || {}); w[i.dataset.liw] = i.value === "" ? null : Number(i.value); w.u = now(); ST.li.week[mon] = w; changed(); toast("Salvo."); });
+  V.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => copyText(LI[b.dataset.copy]));
+  V.querySelectorAll("[data-posted]").forEach(c => c.onchange = () => { ST.li.posted[c.dataset.posted] = { ok: c.checked ? 1 : 0, u: now() }; if (c.checked) markAct(); changed(); render(); });
+  V.querySelectorAll("[data-draft]").forEach(b => b.onclick = () => openDraft(b.dataset.draft, b.dataset.pd));
+  V.querySelectorAll("[data-prof]").forEach(c => c.onchange = () => { ST.li.prof[c.dataset.prof] = c.checked ? now() : -now(); changed(); });
+  on("newIdea", () => miniForm("Nova ideia de post", [["t", "Ideia"]], o => ST.li.ideas.push({ id: uid(), t: o.t, u: now() })));
+  V.querySelectorAll("[data-delidea]").forEach(b => b.onclick = () => { const i = ST.li.ideas.find(x => x.id === b.dataset.delidea); if (i) { i.del = 1; i.u = now(); changed(); render(); } });
+  /* textos livres */
+  V.querySelectorAll("[data-text]").forEach(t => t.onchange = () => { ST.texts[t.dataset.text] = { t: t.value, u: now() }; changed(); toast("Salvo."); });
+  V.querySelectorAll("[data-copytext]").forEach(b => b.onclick = () => { const t = V.querySelector('[data-text="' + b.dataset.copytext + '"]'); copyText(t ? t.value : ""); });
+  /* vagas */
+  V.querySelectorAll("[data-app]").forEach(b => b.onclick = () => appSheet(b.dataset.app));
+  V.querySelectorAll("[data-vgf]").forEach(b => b.onclick = () => { VG.f = b.dataset.vgf; render(); });
+  /* entrevista, documentos */
+  on("newStar", () => starSheet(null));
+  V.querySelectorAll("[data-star]").forEach(b => b.onclick = () => starSheet(b.dataset.star));
+  on("newCt", () => miniForm("Novo contato", [["nome", "Nome"], ["onde", "Onde conheceu (empresa não precisa)"], ["data", "Data da conversa", "date", todayS()], ["nota", "Anotação"]], o => ST.contacts.push(Object.assign({ id: uid(), u: now() }, o))));
+  V.querySelectorAll("[data-ctok]").forEach(b => b.onclick = () => { const c = ST.contacts.find(x => x.id === b.dataset.ctok); c.data = todayS(); c.u = now(); changed(); render(); toast("Anotado: retomado hoje."); });
+  V.querySelectorAll("[data-ctdel]").forEach(b => b.onclick = () => { const c = ST.contacts.find(x => x.id === b.dataset.ctdel); c.del = 1; c.u = now(); changed(); render(); });
+  on("newCert", () => miniForm("Novo certificado", [["nome", "Curso"], ["data", "Data", "date", todayS()], ["link", "Link", "url"]], o => ST.certs.push(Object.assign({ id: uid(), u: now() }, o))));
+  V.querySelectorAll("[data-certdel]").forEach(b => b.onclick = () => { const c = ST.certs.find(x => x.id === b.dataset.certdel); c.del = 1; c.u = now(); changed(); render(); });
+  /* portfólio */
+  V.querySelectorAll("[data-step]").forEach(c => c.onchange = () => { if (c.checked) { ST.steps[c.dataset.step] = now(); markAct(); } else ST.steps[c.dataset.step] = 0; changed(); render(); });
+  on("kbNew", () => miniForm("Novo cartão", [["t", "Tarefa"]], o => { (ST.kanban[PJ] = ST.kanban[PJ] || []).push({ id: uid(), t: o.t, col: "todo", u: now() }); }));
+  V.querySelectorAll("[data-kbm]").forEach(b => b.onclick = () => { const [id, dir] = b.dataset.kbm.split(":"); const c = (ST.kanban[PJ] || []).find(x => x.id === id); const i = KB.findIndex(k => k[0] === c.col) + Number(dir); c.col = KB[Math.max(0, Math.min(2, i))][0]; c.u = now(); if (c.col === "done") markAct(); changed(); render(); });
+  V.querySelectorAll("[data-kbd]").forEach(b => b.onclick = () => { const c = (ST.kanban[PJ] || []).find(x => x.id === b.dataset.kbd); c.del = 1; c.u = now(); changed(); render(); });
+  on("pitchTm", () => { const e = $("#ptTm"); e.hidden = false; clearInterval(IVT); const s0 = now(); IVT = setInterval(() => { if (!document.body.contains(e)) return clearInterval(IVT); const s = Math.floor((now() - s0) / 1000); e.textContent = fmtTm(s); if (s === 180) { beep(); clearInterval(IVT); } }, 500); });
+  /* progresso e rota */
+  on("printRep", printReport);
+  V.querySelectorAll("[data-sk]").forEach(b => b.onclick = () => { const [id, n] = b.dataset.sk.split(":"); const mk = monthKey(); const o = Object.assign({}, ST.skills[mk] || {}); o[id] = Number(n); o.u = now(); ST.skills[mk] = o; changed(); render(); });
+  on("hiredGo", hiredSheet);
+  on("hiredClear", () => { ST.cfg.hired = null; changed(); render(); });
+  /* configurações */
+  V.querySelectorAll("[data-time]").forEach(i => i.onchange = () => { if (!i.value) return; ST.cfg.times[i.dataset.time] = i.value; CFGOPEN = "rotina"; changed(); render(); toast("Horário salvo."); });
+  V.querySelectorAll("[data-card]").forEach(c => c.onchange = () => { ST.cfg.cards[c.dataset.card] = c.checked ? 1 : 0; changed(); });
+  V.querySelectorAll("[data-theme]").forEach(b => b.onclick = () => { ST.cfg.theme = b.dataset.theme; CFGOPEN = "apar"; changed(); setTheme(); render(); });
+  const nt = $("#notifOn"); if (nt) nt.onchange = async () => { if (nt.checked) { const p = await Notification.requestPermission(); ST.cfg.notif = p === "granted" ? 1 : 0; if (p !== "granted") toast("Sem permissão para avisos."); else toast("Avisos ligados."); } else ST.cfg.notif = 0; CFGOPEN = "avisos"; changed(); schedNotifs(); render(); };
+  V.querySelectorAll("details.card[id^=cfg-]").forEach(d => d.addEventListener("toggle", () => { if (d.open) CFGOPEN = d.id.slice(4); }));
+  on("syNew", () => { CL.code = newCode(); CL.base = 0; CL.st = "idle"; clStore(); CFGOPEN = "sync"; render(); syncNow().then(() => render()); });
+  on("syUse", () => { const v = ($("#syIn").value || "").trim().toLowerCase(); if (!codeOk(v)) return toast("Código inválido. Confira os traços."); CL.code = v; CL.base = 0; CL.st = "idle"; clStore(); CFGOPEN = "sync"; render(); syncNow().then(() => render()); });
+  on("syCopy", () => copyText(CL.code));
+  on("syGo", () => syncNow().then(() => render()));
+  on("syOff", () => { CL.code = null; CL.base = 0; CL.st = "off"; clStore(); render(); });
+  on("expB", () => { const b = new Blob([JSON.stringify({ app: "plano-carreira-dados", v: APP_V, at: new Date().toISOString(), state: ST }, null, 1)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "backup-carreira-" + todayS() + ".json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("Backup baixado."); });
+  const ib = $("#impB"); if (ib) ib.onchange = () => { const f = ib.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { const o = JSON.parse(r.result); const s = o.state || o; if (!s || typeof s !== "object" || !s.done) throw 0; localStorage.setItem(KEY, JSON.stringify(s)); ST = load(); ST.upd = now(); saveLocal(); syncKick(); setTheme(); render(); toast("Backup importado."); } catch (e) { toast("Arquivo de backup inválido."); } }; r.readAsText(f); };
+  on("resetAll", () => { if (!confirm("Apagar todo o progresso deste aparelho? A nuvem não é apagada.")) return; localStorage.removeItem(KEY); ST = load(); render(); toast("Apagado deste aparelho."); });
+}
+function hiredSheet() {
+  sheet('<h2>Contratada!</h2><p class="muted">Isso ajusta a rota: pleno no fim de 2028 se entrar como júnior, 2029 se entrar como estagiária.</p><label class="fld"><span>Data</span><input type="date" id="hdD" value="' + todayS() + '"></label><div class="seg" id="hdL"><button type="button" data-l="est" aria-selected="false">Estagiária</button><button type="button" data-l="jr" aria-selected="true">Júnior</button></div><div class="sheetAct"><button type="button" class="btn pri wide" id="hdOk">Salvar</button></div>', () => {
+    let l = "jr"; $$("#hdL button").forEach(b => b.onclick = () => { l = b.dataset.l; $$("#hdL button").forEach(x => x.setAttribute("aria-selected", x === b)); });
+    $("#hdOk").onclick = () => { ST.cfg.hired = { d: $("#hdD").value || todayS(), lvl: l, u: now() }; markAct(); changed(); closeSheet(); render(); toast("Parabéns! Rota ajustada."); };
+  });
+}
+
+/* ---------- aviso de versão nova ---------- */
+function swUpdated() {
+  const b = $("#upd"); b.innerHTML = '<span><b>Versão nova pronta.</b> ' + esc(NEWS[APP_V + 1] || "Melhorias e correções.") + '</span><button type="button" class="btn sm pri" id="updGo">Atualizar</button>'; b.classList.add("on");
+  $("#updGo").onclick = () => location.reload();
+}
+/* a versão nova traz o NEWS dela: mostra uma vez depois de atualizar */
+function showNews() { const k = KEY + "-seen"; const seen = Number(localStorage.getItem(k) || 0); if (seen && seen < APP_V && NEWS[APP_V]) toast("Novidade: " + NEWS[APP_V]); try { localStorage.setItem(k, APP_V); } catch (e) { } }
+
+/* ---------- início ---------- */
+function init() {
+  setTheme();
+  $("#menuBtn").innerHTML = ico("menu"); $("#menuBtn").onclick = openDrawer;
+  $("#drawerX").innerHTML = ico("x"); $("#drawerX").onclick = closeDrawer;
+  $("#scrim").onclick = () => { closeSheet(); closeDrawer(); };
+  $("#nav").onclick = e => { const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); };
+  $("#drawerList").onclick = e => { if (e.target.closest("#dFocus")) { closeDrawer(); return focusOpen(); } const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); };
+  $("#tbar").onclick = e => { const b = e.target.closest("[data-tm]"); if (b) return tmToggle(b.dataset.tm); const o = e.target.closest("[data-open]"); if (o) return openTask(o.dataset.open); if (e.target.closest("#tbFocus")) focusOpen(); };
+  $("#sync").onclick = () => { CFGOPEN = "sync"; go("config"); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet(); closeDrawer(); if ($("#focus").classList.contains("on")) focusClose(); } });
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setTheme);
+  const q = new URLSearchParams(location.search).get("v"), hsh = (location.hash || "").slice(1).split("/");
+  const start = q || hsh[0]; if (start) { if (ALIAS[start]) { SUB[ALIAS[start][0]] = ALIAS[start][1]; VIEW = ALIAS[start][0]; } else if (["hoje", "agenda", "estudar", "carreira", "port", "prog", "rota", "config"].includes(start)) { VIEW = start; if (hsh[1]) SUB[start] = hsh[1]; } }
+  render(); tmTick(); showNews(); schedNotifs();
+  if (CL.code) syncNow().then(() => render());
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { if ($("#focus").classList.contains("on")) wakeOn(); if (CL.code) syncNow().then(() => render()); else render(); } });
+}
+init();
